@@ -1,0 +1,927 @@
+let currentAdmin = null;
+let currentTab = 'dashboard';
+let cachedExecutors = [];
+let cachedOrders = [];
+
+function toast(msg) {
+  const box = document.getElementById('toasts');
+  const el = document.createElement('div');
+  el.className = 'toast';
+  el.textContent = msg;
+  box.appendChild(el);
+  setTimeout(() => el.remove(), 4200);
+}
+
+function esc(s) {
+  return String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function fmtRub(val) {
+  const num = Number(val || 0);
+  if (Number.isNaN(num)) return String(val || '0') + ' ₽';
+  return num.toLocaleString('ru-RU', { maximumFractionDigits: 0 }) + ' ₽';
+}
+
+function statusPillClass(status) {
+  if (['completed', 'active', 'paid', 'resolved_rework'].includes(status)) return 'pill-green';
+  if (['disputed', 'canceled_by_client', 'canceled_by_service', 'canceled_timeout', 'blocked', 'open'].includes(status))
+    return 'pill-red';
+  if (['price_adjustment_pending', 'awaiting_advance', 'awaiting_final_payment', 'pending_verification', 'draft'].includes(status))
+    return 'pill-warn';
+  return 'pill-blue';
+}
+
+function fillCreds(email, password) {
+  document.getElementById('login-email').value = email;
+  document.getElementById('login-pass').value = password;
+}
+
+async function api(url, opts = {}) {
+  const res = await fetch(url, {
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) },
+    ...opts,
+  });
+  const text = await res.text();
+  let data = {};
+  try {
+    data = text ? JSON.parse(text) : {};
+  } catch (_) {
+    data = { raw: text };
+  }
+  if (!res.ok) {
+    const msg = (data.error && data.error.message) || data.detail || `HTTP ${res.status}`;
+    throw new Error(msg);
+  }
+  return data;
+}
+
+async function doLogin() {
+  try {
+    const email = document.getElementById('login-email').value;
+    const password = document.getElementById('login-pass').value;
+    const data = await api('/api/v1/admin/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    });
+    currentAdmin = data.admin;
+    enterAdmin();
+  } catch (e) {
+    toast('Ошибка входа: ' + e.message);
+  }
+}
+
+async function logout() {
+  await api('/api/v1/admin/auth/logout', { method: 'POST' });
+  currentAdmin = null;
+  document.getElementById('admin-view').style.display = 'none';
+  document.getElementById('login-view').style.display = 'flex';
+  document.getElementById('logout-btn').style.display = 'none';
+  document.getElementById('role-badge').textContent = 'ВХОД';
+}
+
+function enterAdmin() {
+  document.getElementById('login-view').style.display = 'none';
+  document.getElementById('admin-view').style.display = 'grid';
+  document.getElementById('logout-btn').style.display = 'inline-flex';
+  document.getElementById('role-badge').textContent = `${currentAdmin.role.toUpperCase()} · ${currentAdmin.email}`;
+  loadTab(currentTab);
+}
+
+function showTab(tab, btn) {
+  currentTab = tab;
+  document.querySelectorAll('.nav-item').forEach((b) => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  loadTab(tab);
+}
+
+async function loadTab(tab) {
+  const root = document.getElementById('admin-content');
+  root.innerHTML = '<div class="ice-panel">Загрузка данных узла…</div>';
+  try {
+    if (tab === 'dashboard') await renderDashboard(root);
+    else if (tab === 'orders') await renderOrders(root);
+    else if (tab === 'tariffs') await renderTariffs(root);
+    else if (tab === 'zones') await renderZones(root);
+    else if (tab === 'executors') await renderExecutors(root);
+    else if (tab === 'disputes') await renderDisputes(root);
+    else if (tab === 'payouts') await renderPayouts(root);
+    else if (tab === 'audit') await renderAudit(root);
+  } catch (e) {
+    root.innerHTML = `<div class="ice-panel"><span class="pill pill-red">ОШИБКА</span> <span style="margin-left:8px">${esc(e.message)}</span></div>`;
+  }
+}
+
+async function renderDashboard(root) {
+  const d = await api('/api/v1/admin/dashboard/summary');
+  const attentionRows = d.attention_orders.length
+    ? d.attention_orders
+        .map(
+          (o) => `<tr>
+        <td class="mono"><b>#${o.public_number}</b></td>
+        <td>${esc(o.public_area_hint)}</td>
+        <td><span class="pill pill-warn">${esc(o.status_label)}</span></td>
+        <td class="mono"><b>${fmtRub(o.final_total)}</b></td>
+        <td style="text-align:right"><button class="btn btn-sm btn-primary" onclick="openOrder('${o.id}')">Досье</button></td>
+      </tr>`
+        )
+        .join('')
+    : '<tr><td colspan="5" style="color:var(--text-muted);text-align:center;padding:22px">Критических инцидентов нет — всё работает в штатном зимнем режиме.</td></tr>';
+
+  root.innerHTML = `
+    <div class="page-head">
+      <div>
+        <div class="section-kicker">СВОДКА ДИСПЕТЧЕРСКОЙ</div>
+        <h2>Операционный дашборд</h2>
+      </div>
+      <button class="btn btn-sm" onclick="loadTab('dashboard')">↻ Обновить телеметрию</button>
+    </div>
+
+    <div class="kpi-grid">
+      <div class="ice-panel ice-interactive kpi-tile">
+        <div class="kpi-label">ВСЕГО ЗАКАЗОВ</div>
+        <div class="kpi-val cryo">${d.total_orders}</div>
+      </div>
+      <div class="ice-panel ice-interactive kpi-tile">
+        <div class="kpi-label">ОБОРОТ (GMV)</div>
+        <div class="kpi-val">${fmtRub(d.gmv_rub)}</div>
+      </div>
+      <div class="ice-panel ice-interactive kpi-tile">
+        <div class="kpi-label">ОПЛАЧЕНО СБП</div>
+        <div class="kpi-val mint">${fmtRub(d.paid_rub)}</div>
+      </div>
+      <div class="ice-panel ice-interactive kpi-tile">
+        <div class="kpi-label">К ВЫПЛАТЕ БРИГАДЕ</div>
+        <div class="kpi-val">${fmtRub(d.accrued_payouts_rub)}</div>
+      </div>
+      <div class="ice-panel ice-interactive kpi-tile">
+        <div class="kpi-label">ОТКРЫТЫЕ СПОРЫ</div>
+        <div class="kpi-val amber">${d.open_disputes} <span class="mono" style="font-size:13px;color:var(--text-muted)">(${d.dispute_share_pct}%)</span></div>
+      </div>
+      <div class="ice-panel ice-interactive kpi-tile">
+        <div class="kpi-label">НА ВЕРИФИКАЦИИ</div>
+        <div class="kpi-val">${d.pending_executors}</div>
+      </div>
+    </div>
+
+    <div class="ice-panel">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <div>
+          <div class="section-kicker">РАДАР ЭСКАЛАЦИЙ</div>
+          <h3 style="margin:4px 0 0;font-size:16px">Заказы, требующие внимания диспетчера</h3>
+        </div>
+        <span class="pill pill-warn">${d.attention_orders.length} шт.</span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>№</th><th>Ориентир</th><th>Статус</th><th>Сумма</th><th></th></tr></thead>
+          <tbody>${attentionRows}</tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+function renderOrderRows(orders) {
+  if (!orders.length) {
+    return '<tr><td colspan="7" style="color:var(--text-muted);text-align:center;padding:28px">Заказов по фильтру не найдено — создайте новый заказ в Симуляторе MAX.</td></tr>';
+  }
+  return orders
+    .map(
+      (o) => `
+    <tr>
+      <td class="mono"><b>#${o.public_number}</b></td>
+      <td>${esc(o.service_label)}</td>
+      <td>
+        <b>${esc(o.zone_name || '—')}</b>
+        <div style="font-size:11.5px;color:var(--text-muted)">${esc(o.address_text)}</div>
+      </td>
+      <td>${esc(o.client_name)}</td>
+      <td><span class="pill ${statusPillClass(o.status)}">${esc(o.status_label)}</span></td>
+      <td class="mono">
+        <b>${fmtRub(o.final_total)}</b>
+        <div style="font-size:11px;color:var(--text-muted)">Опл: ${fmtRub(o.paid_amount)}</div>
+      </td>
+      <td style="text-align:right"><button class="btn btn-sm btn-primary" onclick="openOrder('${o.id}')">Досье</button></td>
+    </tr>`
+    )
+    .join('');
+}
+
+function filterOrdersTable() {
+  const q = (document.getElementById('ord-search')?.value || '').toLowerCase().trim();
+  const st = document.getElementById('ord-status-filter')?.value || '';
+  const filtered = cachedOrders.filter((o) => {
+    if (st && o.status !== st) return false;
+    if (q) {
+      const hay = `${o.public_number} ${o.address_text} ${o.client_name} ${o.zone_name} ${o.service_label}`.toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
+  const tbody = document.getElementById('orders-tbody');
+  if (tbody) tbody.innerHTML = renderOrderRows(filtered);
+}
+
+async function renderOrders(root) {
+  const [orders, execs] = await Promise.all([
+    api('/api/v1/admin/orders'),
+    api('/api/v1/admin/executors'),
+  ]);
+  cachedExecutors = execs;
+  cachedOrders = orders;
+
+  root.innerHTML = `
+    <div class="page-head">
+      <div>
+        <div class="section-kicker">ОПЕРАТИВНЫЙ УЧЁТ</div>
+        <h2>Реестр заказов (${orders.length})</h2>
+      </div>
+      <button class="btn btn-sm" onclick="loadTab('orders')">↻ Обновить</button>
+    </div>
+
+    <div class="filter-bar">
+      <input class="input" id="ord-search" style="max-width:320px" placeholder="Поиск по №, адресу, клиенту, зоне..." oninput="filterOrdersTable()" />
+      <select id="ord-status-filter" style="max-width:240px" onchange="filterOrdersTable()">
+        <option value="">Все статусы</option>
+        <option value="awaiting_advance">Ожидает аванс</option>
+        <option value="searching_executor">Поиск исполнителя</option>
+        <option value="assigned">Назначен</option>
+        <option value="en_route">В пути</option>
+        <option value="arrived">На месте</option>
+        <option value="price_adjustment_pending">Согласование цены</option>
+        <option value="in_progress">В работе</option>
+        <option value="awaiting_acceptance">Ожидает приёмки</option>
+        <option value="awaiting_final_payment">Ожидает доплаты</option>
+        <option value="completed">Завершён</option>
+        <option value="disputed">Спор</option>
+      </select>
+    </div>
+
+    <div class="ice-panel table-wrap">
+      <table>
+        <thead><tr><th>№</th><th>Услуга</th><th>Локация</th><th>Клиент</th><th>Статус</th><th>Финансы</th><th></th></tr></thead>
+        <tbody id="orders-tbody">${renderOrderRows(orders)}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+async function openOrder(orderId) {
+  const o = await api(`/api/v1/admin/orders/${orderId}`);
+  const mediaHtml = o.media.length
+    ? `<div class="photo-grid">${o.media
+        .map(
+          (m) => `
+        <div class="photo-card" onclick="IceDialog.lightbox('${esc(m.url)}', 'Заказ #${o.public_number} · ${esc(m.stage.toUpperCase())}')">
+          <div class="mono" style="font-size:10.5px;font-weight:700;color:var(--cryo);margin-bottom:5px">${esc(m.stage.toUpperCase())}</div>
+          <img src="${esc(m.url)}" alt="${esc(m.stage)}" />
+        </div>`
+        )
+        .join('')}</div>`
+    : '<div style="color:var(--text-muted);font-size:13px">Фотографий пока нет — исполнитель загрузит ДО и ПОСЛЕ в боте.</div>';
+
+  const execOptions = cachedExecutors
+    .filter((e) => e.status === 'active')
+    .map((e) => `<option value="${e.user_id}">${esc(e.display_name)} (рейтинг ${e.rating})</option>`)
+    .join('');
+
+  document.getElementById('order-modal-body').innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:16px">
+      <div>
+        <div class="section-kicker">ДОСЬЕ ЗАКАЗА · ${esc(o.payment_status.toUpperCase())}</div>
+        <h2 style="margin:5px 0 0;font-size:20px">Заказ <span class="mono">#${o.public_number}</span> · ${esc(o.service_label)}</h2>
+      </div>
+      <button class="btn btn-sm btn-ghost" onclick="closeModal()">Закрыть ✕</button>
+    </div>
+
+    <div class="split-2" style="margin-bottom:14px">
+      <div class="ice-panel" style="padding:14px">
+        <div class="field-label">МАРШРУТ И КЛИЕНТ</div>
+        <div style="display:flex;flex-direction:column;gap:5px;font-size:13px">
+          <div>Статус: <span class="pill ${statusPillClass(o.status)}">${esc(o.status_label)}</span></div>
+          <div>Клиент: <b>${esc(o.client.display_name)}</b></div>
+          <div>Точный адрес: <b>${esc(o.address_text)}</b></div>
+          <div style="color:var(--text-muted)">В общем чате: ${esc(o.public_area_hint)}</div>
+          <div>Связь: <code>${esc(o.contact_mode)}</code> ${o.client.shared_contact_phone ? '· ' + esc(o.client.shared_contact_phone) : ''}</div>
+        </div>
+      </div>
+
+      <div class="ice-panel" style="padding:14px">
+        <div class="field-label">РАСЧЁТ И СБП</div>
+        <div class="receipt-row"><span>Ориентировочно</span><b class="mono">${fmtRub(o.estimated_total)}</b></div>
+        <div class="receipt-row"><span>Итоговая сумма</span><b class="mono" style="color:var(--cryo)">${fmtRub(o.final_total)}</b></div>
+        <div class="receipt-row"><span>Аванс / Оплачено</span><b class="mono">${fmtRub(o.advance_amount)} / ${fmtRub(o.paid_amount)}</b></div>
+        <div class="receipt-row"><span>Скидка / Бонус бригаде</span><span class="mono">${fmtRub(o.group_discount_amount)} / ${fmtRub(o.executor_bonus_amount)}</span></div>
+      </div>
+    </div>
+
+    <div class="ice-panel" style="margin-bottom:14px;padding:14px">
+      <div class="field-label" style="margin-bottom:10px">ФОТООТЧЁТ (КЛИК ДЛЯ УВЕЛИЧЕНИЯ)</div>
+      ${mediaHtml}
+    </div>
+
+    <div class="ice-panel" style="margin-bottom:14px;padding:14px">
+      <div class="field-label" style="margin-bottom:10px">ДИСПЕТЧЕРСКИЕ КОМАНДЫ</div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+        <select id="assign-exec-sel" style="max-width:250px">${execOptions}</select>
+        <button class="btn btn-primary btn-sm" onclick="assignExec('${o.id}')">Назначить исполнителя</button>
+        <button class="btn btn-warn btn-sm" onclick="proposeAdj('${o.id}', '${o.final_total}')">Корректировка цены &gt;20%</button>
+        <button class="btn btn-danger btn-sm" onclick="cancelOrd('${o.id}')">Отменить заказ</button>
+      </div>
+    </div>
+
+    <div class="split-2">
+      <div class="ice-panel" style="padding:14px">
+        <div class="field-label" style="margin-bottom:8px">ПЛАТЕЖИ СБП И ЧЕКИ 54-ФЗ</div>
+        ${
+          o.payments
+            .map(
+              (p) => `<div class="receipt-row">
+            <span><b class="mono">${esc(p.purpose)}</b> · чек: <code>${esc(p.receipt_status || '—')}</code></span>
+            <span><b class="mono">${fmtRub(p.amount)}</b> <span class="pill ${statusPillClass(p.status)}">${esc(p.status)}</span></span>
+          </div>`
+            )
+            .join('') || '<div style="color:var(--text-muted)">Платежей нет</div>'
+        }
+      </div>
+      <div class="ice-panel" style="padding:14px">
+        <div class="field-label" style="margin-bottom:10px">ХРОНОЛОГИЯ СТАТУСОВ</div>
+        <div class="timeline">
+          ${o.history
+            .map(
+              (h) => `<div class="tl-item">
+            <span class="mono" style="color:var(--text-muted);font-size:11px">${(h.created_at || '').slice(11, 19)}</span>
+            <b style="margin-left:6px">${esc(h.to_status)}</b>
+            <div style="color:var(--text-frost);font-size:12px">${esc(h.reason || '')}</div>
+          </div>`
+            )
+            .join('')}
+        </div>
+      </div>
+    </div>
+  `;
+  document.getElementById('order-modal').classList.add('open');
+}
+
+function closeModal() {
+  document.getElementById('order-modal').classList.remove('open');
+}
+
+async function assignExec(orderId) {
+  try {
+    const executor_user_id = document.getElementById('assign-exec-sel').value;
+    await api(`/api/v1/admin/orders/${orderId}/assign`, {
+      method: 'POST',
+      body: JSON.stringify({ executor_user_id }),
+    });
+    toast('Исполнитель назначен, уведомление отправлено в MAX');
+    await openOrder(orderId);
+  } catch (e) {
+    toast('Ошибка: ' + e.message);
+  }
+}
+
+async function proposeAdj(orderId, currentTotal) {
+  const vals = await IceDialog.form({
+    title: 'Корректировка цены (>20%)',
+    subtitle: 'Новая сумма вступит в силу только после подтверждения клиентом в MAX-боте.',
+    submitText: 'Отправить клиенту',
+    submitClass: 'btn-warn',
+    fields: [
+      { name: 'new_total', label: 'Новая итоговая сумма (₽)', type: 'number', value: currentTotal, required: true },
+      { name: 'reason', label: 'Обоснование расхождения', type: 'textarea', value: 'Фактический объём и плотный наст выше заявленного', required: true },
+    ],
+  });
+  if (!vals) return;
+  try {
+    await api(`/api/v1/admin/orders/${orderId}/price-adjustment`, {
+      method: 'POST',
+      body: JSON.stringify({ new_total: vals.new_total, reason: vals.reason }),
+    });
+    toast('Запрос на корректировку цены отправлен клиенту в MAX');
+    await openOrder(orderId);
+  } catch (e) {
+    toast('Ошибка: ' + e.message);
+  }
+}
+
+async function cancelOrd(orderId) {
+  const vals = await IceDialog.form({
+    title: 'Отмена заказа диспетчером',
+    subtitle: 'При отмене со стороны сервиса клиенту возвращается 100% оплаченного аванса.',
+    submitText: 'Отменить заказ',
+    submitClass: 'btn-danger',
+    fields: [
+      { name: 'reason', label: 'Причина отмены', type: 'textarea', value: 'Отменено диспетчером', required: true },
+    ],
+  });
+  if (!vals) return;
+  try {
+    await api(`/api/v1/admin/orders/${orderId}/cancel`, {
+      method: 'POST',
+      body: JSON.stringify({ reason: vals.reason, by_service: true }),
+    });
+    toast('Заказ отменён, возврат инициирован');
+    closeModal();
+    loadTab('orders');
+  } catch (e) {
+    toast('Ошибка: ' + e.message);
+  }
+}
+
+async function renderTariffs(root) {
+  const cur = await api('/api/v1/admin/tariffs/current');
+  root.innerHTML = `
+    <div class="page-head">
+      <div>
+        <div class="section-kicker">ТАРИФНАЯ МАТРИЦА · ВЕРСИЯ V${cur.version}</div>
+        <h2>Тарифы и интерактивная песочница</h2>
+      </div>
+      <span class="pill pill-blue">ОКРУГЛЕНИЕ ДО 50 ₽</span>
+    </div>
+
+    <div class="split-2">
+      <div class="ice-panel">
+        <div class="field-label" style="margin-bottom:8px">КОНФИГУРАЦИЯ ТАРИФА (JSON)</div>
+        <textarea id="tariff-json" rows="21" class="mono" style="font-size:11.5px;line-height:1.5">${esc(JSON.stringify(cur.config_json, null, 2))}</textarea>
+        <div style="display:flex;gap:8px;margin-top:12px">
+          <input class="input" id="tariff-comment" placeholder="Комментарий к версии v${cur.version + 1}..." />
+          <button class="btn btn-primary" style="white-space:nowrap" onclick="saveTariff()">Сохранить v${cur.version + 1}</button>
+        </div>
+      </div>
+
+      <div class="ice-panel" style="display:flex;flex-direction:column;gap:12px">
+        <div>
+          <div class="section-kicker">ПЕСОЧНИЦА КАЛЬКУЛЯТОРА</div>
+          <h3 style="margin:5px 0 0;font-size:16px">Проверка формул до публикации</h3>
+        </div>
+
+        <div>
+          <label class="field-label">Тип услуги</label>
+          <select id="pv-svc">
+            <option value="snow_yard">Уборка снега во дворе</option>
+            <option value="snow_road">Расчистка дороги / проезда</option>
+            <option value="car_rescue">Срочно застрял</option>
+            <option value="yard_help">Помощь по двору</option>
+            <option value="movers">Грузчики на переезд</option>
+          </select>
+        </div>
+
+        <div class="split-2">
+          <div>
+            <label class="field-label">Площадь (м²)</label>
+            <input class="input mono" id="pv-area" type="number" value="120" />
+          </div>
+          <div>
+            <label class="field-label">Глубина снега</label>
+            <select id="pv-depth">
+              <option value="up_to_10">До 10 см (×1.0)</option>
+              <option value="from_10_to_30" selected>10–30 см (×1.5)</option>
+              <option value="over_30">Больше 30 см (×2.0)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="split-2">
+          <div>
+            <label class="field-label">Срочность</label>
+            <select id="pv-urg">
+              <option value="today">В течение дня (×1.0)</option>
+              <option value="within_3h" selected>До 3 часов (×1.3)</option>
+              <option value="now_or_night">Сейчас / Ночь (×1.5)</option>
+            </select>
+          </div>
+          <div>
+            <label class="field-label">Геозона</label>
+            <select id="pv-zone">
+              <option value="malakhovka">Малаховка</option>
+              <option value="tomilino">Томилино</option>
+              <option value="kraskovo">Красково</option>
+              <option value="bykovo">Быково</option>
+              <option value="lytkarino">Лыткарино</option>
+            </select>
+          </div>
+        </div>
+
+        <button class="btn btn-success" onclick="runPreview()">Рассчитать смету по JSON</button>
+        <div id="pv-out" class="receipt-box">
+          <div style="color:var(--text-muted);font-size:12.5px">Нажмите «Рассчитать смету», чтобы увидеть детализацию.</div>
+        </div>
+      </div>
+    </div>
+  `;
+  runPreview();
+}
+
+async function saveTariff() {
+  try {
+    const config_json = JSON.parse(document.getElementById('tariff-json').value);
+    const comment = document.getElementById('tariff-comment').value;
+    const res = await api('/api/v1/admin/tariffs', {
+      method: 'PUT',
+      body: JSON.stringify({ config_json, comment }),
+    });
+    toast(`Опубликована версия тарифа v${res.version} (старые заказы защищены)`);
+    loadTab('tariffs');
+  } catch (e) {
+    toast('Ошибка сохранения: ' + e.message);
+  }
+}
+
+async function runPreview() {
+  try {
+    const override_config = JSON.parse(document.getElementById('tariff-json').value);
+    const res = await api('/api/v1/admin/tariffs/preview', {
+      method: 'POST',
+      body: JSON.stringify({
+        service_type: document.getElementById('pv-svc').value,
+        geo_zone_code: document.getElementById('pv-zone').value,
+        area_m2: Number(document.getElementById('pv-area').value),
+        length_m: 40,
+        width_m: 4,
+        depth_bucket: document.getElementById('pv-depth').value,
+        urgency: document.getElementById('pv-urg').value,
+        override_config,
+      }),
+    });
+    document.getElementById('pv-out').innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px">
+        <span class="field-label" style="margin:0">ОРИЕНТИРОВОЧНО К ОПЛАТЕ</span>
+        <span class="receipt-total">${fmtRub(res.estimated_total)}</span>
+      </div>
+      <div class="receipt-row"><span>Стоимость работ</span><b class="mono">${fmtRub(res.work_cost)}</b></div>
+      <div class="receipt-row"><span>Выезд бригады</span><b class="mono">${fmtRub(res.dispatch_fee)}</b></div>
+      <div class="receipt-row"><span>Аванс СБП</span><b class="mono" style="color:var(--aurora-mint)">${fmtRub(res.advance_amount)}</b></div>
+      <div class="receipt-row"><span>Остаток после приёмки</span><b class="mono">${fmtRub(res.remainder_amount)}</b></div>
+      <div class="receipt-row"><span>Прогноз выплаты исполнителю</span><b class="mono" style="color:var(--beacon-amber)">${fmtRub(res.estimated_executor_payout)}</b></div>
+      ${res.cleaning_method ? `<div class="receipt-row"><span>Автовыбор техники</span><code>${esc(res.cleaning_method)}</code></div>` : ''}
+    `;
+  } catch (e) {
+    toast('Ошибка расчёта: ' + e.message);
+  }
+}
+
+async function renderZones(root) {
+  const zones = await api('/api/v1/admin/geo-zones');
+  root.innerHTML = `
+    <div class="page-head">
+      <div>
+        <div class="section-kicker">ПОЛИГОНЫ И ВЫЕЗД</div>
+        <h2>Геозоны обслуживания</h2>
+      </div>
+    </div>
+    <div class="ice-panel table-wrap">
+      <table>
+        <thead><tr><th>Зона</th><th>Уровень</th><th>Выезд</th><th>Статус</th><th style="text-align:right">Управление</th></tr></thead>
+        <tbody>${zones
+          .map(
+            (z) => `<tr>
+          <td><b>${esc(z.name)}</b> <code style="margin-left:6px">${esc(z.code)}</code></td>
+          <td><span class="pill pill-blue">${esc(z.tier)}</span></td>
+          <td class="mono"><b>${fmtRub(z.dispatch_fee)}</b></td>
+          <td><span class="pill ${z.is_active ? 'pill-green' : 'pill-red'}">${z.is_active ? 'АКТИВНА' : 'ВЫКЛ'}</span></td>
+          <td style="text-align:right;display:flex;gap:6px;justify-content:flex-end">
+            <button class="btn btn-sm" onclick="toggleZone('${z.id}', ${!z.is_active})">${z.is_active ? 'Отключить' : 'Включить'}</button>
+            <button class="btn btn-sm btn-primary" onclick="editZoneFee('${z.id}', '${esc(z.name)}', '${z.dispatch_fee}')">Ставка выезда</button>
+          </td>
+        </tr>`
+          )
+          .join('')}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+async function toggleZone(id, is_active) {
+  await api(`/api/v1/admin/geo-zones/${id}`, { method: 'PATCH', body: JSON.stringify({ is_active }) });
+  toast('Статус геозоны обновлён');
+  loadTab('zones');
+}
+
+async function editZoneFee(id, zoneName, cur) {
+  const vals = await IceDialog.form({
+    title: `Ставка выезда · ${zoneName}`,
+    subtitle: 'Новая ставка применяется для всех последующих заказов в этой геозоне.',
+    submitText: 'Сохранить ставку',
+    fields: [{ name: 'dispatch_fee', label: 'Стоимость выезда (₽)', type: 'number', value: cur, required: true }],
+  });
+  if (!vals) return;
+  await api(`/api/v1/admin/geo-zones/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ dispatch_fee: vals.dispatch_fee }),
+  });
+  toast('Ставка выезда обновлена');
+  loadTab('zones');
+}
+
+async function renderExecutors(root) {
+  const list = await api('/api/v1/admin/executors');
+  root.innerHTML = `
+    <div class="page-head">
+      <div>
+        <div class="section-kicker">БРИГАДА И ТЕХНИКА</div>
+        <h2>Исполнители и допуски</h2>
+      </div>
+    </div>
+    <div class="ice-panel table-wrap">
+      <table>
+        <thead><tr><th>Исполнитель</th><th>Статус</th><th>Рейтинг</th><th>Оснащение / Допуски</th><th>К выплате</th><th style="text-align:right">Действия</th></tr></thead>
+        <tbody>${list
+          .map(
+            (e) => `<tr>
+          <td>
+            <b>${esc(e.display_name)}</b>
+            <div class="mono" style="font-size:11px;color:var(--text-muted)">ИНН: ${esc(e.inn || '—')} · ${esc(e.role)}</div>
+          </td>
+          <td><span class="pill ${statusPillClass(e.status)}">${esc(e.status)}</span></td>
+          <td class="mono"><b>${e.rating} ★</b> <span style="color:var(--text-muted)">(${e.completed_orders_count})</span></td>
+          <td style="display:flex;gap:5px;flex-wrap:wrap">
+            ${e.has_snowblower ? '<span class="pill pill-blue">СНЕГОУБОРЩИК</span>' : ''}
+            ${e.has_tractor ? '<span class="pill pill-blue">ТРАКТОР</span>' : ''}
+            ${e.roof_certified ? '<span class="pill pill-green">ДОПУСК КРЫШИ</span>' : '<span class="pill">БЕЗ КРЫШ</span>'}
+          </td>
+          <td class="mono"><b>${fmtRub(e.accrued_balance_rub)}</b></td>
+          <td style="text-align:right">
+            <div style="display:inline-flex;gap:6px">
+              ${e.status !== 'active' ? `<button class="btn btn-success btn-sm" onclick="verifyExec('${e.user_id}', 'active')">Активировать</button>` : ''}
+              <button class="btn btn-sm" onclick="toggleRoof('${e.user_id}', ${!e.roof_certified})">${e.roof_certified ? 'Снять крыши' : 'Допуск крыш'}</button>
+              <button class="btn btn-danger btn-sm" onclick="penaltyExec('${e.user_id}', '${esc(e.display_name)}')">Штраф</button>
+            </div>
+          </td>
+        </tr>`
+          )
+          .join('')}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+async function verifyExec(id, status) {
+  await api(`/api/v1/admin/executors/${id}/verify`, { method: 'PATCH', body: JSON.stringify({ status }) });
+  toast('Статус исполнителя обновлён');
+  loadTab('executors');
+}
+
+async function toggleRoof(id, roof_certified) {
+  await api(`/api/v1/admin/executors/${id}/permissions`, { method: 'PATCH', body: JSON.stringify({ roof_certified }) });
+  toast('Допуск к высотным работам обновлён');
+  loadTab('executors');
+}
+
+async function penaltyExec(id, name) {
+  const vals = await IceDialog.form({
+    title: `Удержание / штраф · ${name}`,
+    subtitle: 'Сумма будет отражена отдельной отрицательной записью в леджере выплат.',
+    submitText: 'Применить штраф',
+    submitClass: 'btn-danger',
+    fields: [
+      { name: 'amount', label: 'Сумма штрафа (₽)', type: 'number', value: '500', required: true },
+      { name: 'reason', label: 'Основание', type: 'textarea', value: 'Опоздание / срыв выезда', required: true },
+    ],
+  });
+  if (!vals) return;
+  await api(`/api/v1/admin/executors/${id}/penalty`, {
+    method: 'POST',
+    body: JSON.stringify({ amount: vals.amount, reason: vals.reason }),
+  });
+  toast('Штраф зафиксирован в леджере');
+  loadTab('executors');
+}
+
+async function renderDisputes(root) {
+  const list = await api('/api/v1/admin/disputes');
+  root.innerHTML = `
+    <div class="page-head">
+      <div>
+        <div class="section-kicker">АРБИТРАЖ КАЧЕСТВА</div>
+        <h2>Споры и рекламации</h2>
+      </div>
+    </div>
+    <div class="ice-panel table-wrap">
+      <table>
+        <thead><tr><th>Заказ</th><th>Претензия клиента</th><th>Статус</th><th>Решение</th><th style="text-align:right">Арбитраж</th></tr></thead>
+        <tbody>${
+          list.length
+            ? list
+                .map(
+                  (d) => `<tr>
+            <td class="mono"><b>#${d.order_public_number}</b></td>
+            <td>${esc(d.reason)}</td>
+            <td><span class="pill ${statusPillClass(d.status)}">${esc(d.status)}</span></td>
+            <td>${esc(d.resolution_note || '—')}</td>
+            <td style="text-align:right">
+              ${
+                d.status === 'open'
+                  ? `<div style="display:inline-flex;gap:6px">
+                      <button class="btn btn-sm" onclick="resDispute('${d.id}', 'resolved_rework')">Доработка</button>
+                      <button class="btn btn-warn btn-sm" onclick="resDispute('${d.id}', 'resolved_discount')">Скидка</button>
+                      <button class="btn btn-danger btn-sm" onclick="resDispute('${d.id}', 'resolved_refund')">Возврат</button>
+                    </div>`
+                  : '<span style="color:var(--text-muted)">Закрыт</span>'
+              }
+            </td>
+          </tr>`
+                )
+                .join('')
+            : '<tr><td colspan="5" style="color:var(--text-muted);text-align:center;padding:24px">Открытых споров нет</td></tr>'
+        }</tbody>
+      </table>
+    </div>
+  `;
+}
+
+async function resDispute(id, resolution) {
+  const fields = [
+    { name: 'note', label: 'Комментарий решения', type: 'textarea', value: 'Решено диспетчером по фотоотчёту', required: true },
+  ];
+  if (resolution === 'resolved_discount') {
+    fields.push({ name: 'discount_amount', label: 'Размер скидки клиенту (₽)', type: 'number', value: '500', required: true });
+  }
+  if (resolution === 'resolved_refund') {
+    fields.push({ name: 'refund_amount', label: 'Сумма возврата (₽, 0 = весь оплаченный аванс)', type: 'number', value: '0', required: true });
+  }
+  const titles = {
+    resolved_rework: 'Назначить доработку',
+    resolved_discount: 'Закрыть спор со скидкой',
+    resolved_refund: 'Оформить возврат средств',
+  };
+  const vals = await IceDialog.form({
+    title: titles[resolution] || 'Разрешение спора',
+    submitText: 'Применить решение',
+    submitClass: resolution === 'resolved_refund' ? 'btn-danger' : 'btn-primary',
+    fields,
+  });
+  if (!vals) return;
+  try {
+    await api(`/api/v1/admin/disputes/${id}/resolve`, {
+      method: 'POST',
+      body: JSON.stringify({
+        resolution,
+        note: vals.note,
+        discount_amount: Number(vals.discount_amount || 0),
+        refund_amount: Number(vals.refund_amount || 0),
+      }),
+    });
+    toast('Спор урегулирован, стороны уведомлены в MAX');
+    loadTab('disputes');
+  } catch (e) {
+    toast('Ошибка: ' + e.message);
+  }
+}
+
+async function renderPayouts(root) {
+  const [balances, batches] = await Promise.all([
+    api('/api/v1/admin/payouts/balances'),
+    api('/api/v1/admin/payouts/batches'),
+  ]);
+  root.innerHTML = `
+    <div class="page-head">
+      <div>
+        <div class="section-kicker">РАСЧЁТЫ С САМОЗАНЯТЫМИ</div>
+        <h2>Финансы и выплаты (НПД)</h2>
+      </div>
+      <a class="btn btn-sm btn-primary" href="/api/v1/admin/payouts/batches/export.csv">⬇ Экспорт реестра CSV</a>
+    </div>
+
+    <div class="ice-panel table-wrap" style="margin-bottom:16px">
+      <div class="field-label" style="margin-bottom:10px">ТЕКУЩИЕ НАЧИСЛЕНИЯ БРИГАДЫ</div>
+      <table>
+        <thead><tr><th>Исполнитель</th><th>ИНН</th><th>К выплате</th><th>Выплачено ранее</th><th style="text-align:right">Ведомость</th></tr></thead>
+        <tbody>${balances
+          .map(
+            (b) => `<tr>
+          <td><b>${esc(b.display_name)}</b></td>
+          <td class="mono">${esc(b.inn || '—')}</td>
+          <td class="mono"><b style="color:var(--cryo)">${fmtRub(b.accrued_rub)}</b></td>
+          <td class="mono">${fmtRub(b.paid_rub)}</td>
+          <td style="text-align:right">${
+            Number(b.accrued_rub) > 0
+              ? `<button class="btn btn-primary btn-sm" onclick="createBatch('${b.executor_id}')">Сформировать</button>`
+              : '<span style="color:var(--text-muted)">—</span>'
+          }</td>
+        </tr>`
+          )
+          .join('')}</tbody>
+      </table>
+    </div>
+
+    <div class="ice-panel table-wrap">
+      <div class="field-label" style="margin-bottom:10px">РЕЕСТР ВЕДОМОСТЕЙ И ЧЕКОВ «МОЙ НАЛОГ»</div>
+      <table>
+        <thead><tr><th>Исполнитель</th><th>Сумма</th><th>Статус</th><th>Чек НПД</th><th style="text-align:right">Проводка</th></tr></thead>
+        <tbody>${
+          batches.length
+            ? batches
+                .map(
+                  (b) => `<tr>
+            <td><b>${esc(b.executor_name)}</b></td>
+            <td class="mono"><b>${fmtRub(b.total_amount)}</b></td>
+            <td><span class="pill ${statusPillClass(b.status)}">${esc(b.status)}</span></td>
+            <td>${b.npd_receipt_id ? `<code>${esc(b.npd_receipt_id)}</code>` : '—'}</td>
+            <td style="text-align:right">${
+              b.status === 'draft'
+                ? `<button class="btn btn-success btn-sm" onclick="markPaid('${b.id}', '${esc(b.executor_name)}', '${b.total_amount}')">Выплатить + НПД</button>`
+                : '<span style="color:var(--aurora-mint)" class="mono">ПРОВЕДЕНО</span>'
+            }</td>
+          </tr>`
+                )
+                .join('')
+            : '<tr><td colspan="5" style="color:var(--text-muted);text-align:center;padding:22px">Ведомостей пока нет</td></tr>'
+        }</tbody>
+      </table>
+    </div>
+  `;
+}
+
+async function createBatch(executor_id) {
+  try {
+    await api('/api/v1/admin/payouts/batches', { method: 'POST', body: JSON.stringify({ executor_id }) });
+    toast('Ведомость сформирована');
+    loadTab('payouts');
+  } catch (e) {
+    toast('Ошибка: ' + e.message);
+  }
+}
+
+async function markPaid(batchId, execName, amount) {
+  const vals = await IceDialog.form({
+    title: `Подтверждение выплаты · ${execName}`,
+    subtitle: `Сумма к перечислению: ${fmtRub(amount)}. Зафиксируйте номер чека НПД.`,
+    submitText: 'Провести выплату',
+    submitClass: 'btn-success',
+    fields: [
+      { name: 'payment_method_note', label: 'Способ перевода', value: 'Перевод СБП самозанятому', required: true },
+      { name: 'npd_receipt_id', label: 'Номер чека «Мой налог»', value: 'NPD-2026-0001', required: true },
+      { name: 'npd_receipt_url', label: 'Ссылка на чек НПД (опционально)', value: 'https://lknpd.nalog.ru/api/v1/receipt/demo' },
+    ],
+  });
+  if (!vals) return;
+  await api(`/api/v1/admin/payouts/batches/${batchId}/mark-paid`, {
+    method: 'POST',
+    body: JSON.stringify(vals),
+  });
+  toast('Выплата проведена, чек НПД сохранён в реестре');
+  loadTab('payouts');
+}
+
+async function renderAudit(root) {
+  const [logs, chats] = await Promise.all([
+    api('/api/v1/admin/audit-logs'),
+    api('/api/v1/admin/bot-chats'),
+  ]);
+  root.innerHTML = `
+    <div class="page-head">
+      <div>
+        <div class="section-kicker">КОНТРОЛЬ ДОСТУПА И СОБЫТИЙ</div>
+        <h2>Чаты MAX и журнал аудита</h2>
+      </div>
+    </div>
+
+    <div class="ice-panel table-wrap" style="margin-bottom:16px">
+      <div class="field-label" style="margin-bottom:10px">ЗАРЕГИСТРИРОВАННЫЕ ЧАТЫ БОТА (BOT_ADDED)</div>
+      <table>
+        <thead><tr><th>chat_id</th><th>Название</th><th>Назначение</th><th>Права админа</th></tr></thead>
+        <tbody>${chats
+          .map(
+            (c) => `<tr>
+          <td><code>${c.chat_id}</code></td>
+          <td><b>${esc(c.title)}</b></td>
+          <td><span class="pill pill-blue">${esc(c.chat_purpose)}</span></td>
+          <td><span class="pill ${c.bot_is_admin ? 'pill-green' : 'pill-red'}">${c.bot_is_admin ? 'ДА' : 'НЕТ'}</span></td>
+        </tr>`
+          )
+          .join('')}</tbody>
+      </table>
+    </div>
+
+    <div class="ice-panel table-wrap">
+      <div class="field-label" style="margin-bottom:10px">ЖУРНАЛ ДЕЙСТВИЙ АДМИНИСТРАТОРОВ</div>
+      <table>
+        <thead><tr><th>Время</th><th>Учётная запись</th><th>Действие</th><th>Объект</th><th>Изменения</th></tr></thead>
+        <tbody>${logs
+          .map(
+            (l) => `<tr>
+          <td class="mono" style="font-size:11.5px;color:var(--text-muted)">${(l.created_at || '').slice(0, 19)}</td>
+          <td>${esc(l.admin_email)}</td>
+          <td><span class="pill pill-blue">${esc(l.action)}</span></td>
+          <td class="mono" style="font-size:11.5px">${esc(l.entity_type)}:${esc(l.entity_id).slice(0, 8)}</td>
+          <td><code style="font-size:11px">${esc(JSON.stringify(l.diff_json))}</code></td>
+        </tr>`
+          )
+          .join('')}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+api('/api/v1/admin/auth/me')
+  .then((me) => {
+    currentAdmin = me;
+    enterAdmin();
+  })
+  .catch(() => {});

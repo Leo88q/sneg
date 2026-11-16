@@ -1,0 +1,456 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Веб-админка · Снег-Диспетчер</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Unbounded:wght@500;600;700;800&display=swap"
+    rel="stylesheet"
+  />
+  <link rel="stylesheet" href="/static/styles.css" />
+  <style>
+    /* Экран входа (Ice Vault) */
+    .login-wrap {
+      min-height: calc(100vh - 59px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+
+    .login-monolith {
+      width: 100%;
+      max-width: 440px;
+      padding: 32px 28px;
+    }
+
+    .vault-emblem {
+      width: 52px;
+      height: 52px;
+      display: grid;
+      place-items: center;
+      background: linear-gradient(135deg, rgba(186, 240, 255, 0.25), rgba(20, 74, 114, 0.55));
+      border: 1px solid var(--ice-edge-strong);
+      clip-path: var(--cut-md);
+      color: var(--cryo);
+      margin-bottom: 16px;
+      box-shadow: 0 0 28px rgba(140, 228, 255, 0.22);
+    }
+
+    .quick-role-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin: 14px 0 18px;
+    }
+
+    .quick-role-btn {
+      padding: 8px 10px;
+      border-radius: 8px;
+      border: 1px solid var(--ice-edge-soft);
+      background: rgba(140, 228, 255, 0.06);
+      color: var(--text-frost);
+      cursor: pointer;
+      text-align: left;
+      transition: all 0.15s ease;
+    }
+    .quick-role-btn:hover {
+      border-color: var(--cryo);
+      background: rgba(140, 228, 255, 0.14);
+      color: #fff;
+    }
+    .quick-role-btn b {
+      display: block;
+      font-size: 12.5px;
+    }
+    .quick-role-btn span {
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+      color: var(--text-muted);
+    }
+
+    /* Основной каркас админки */
+    .admin-layout {
+      display: grid;
+      grid-template-columns: 248px 1fr;
+      min-height: calc(100vh - 59px);
+    }
+
+    .admin-nav {
+      background: linear-gradient(180deg, rgba(8, 28, 44, 0.88) 0%, rgba(4, 15, 25, 0.94) 100%);
+      backdrop-filter: blur(22px);
+      border-right: 1px solid var(--ice-edge);
+      padding: 16px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .nav-section-label {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      padding: 10px 12px 4px;
+    }
+
+    .nav-item {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 13px;
+      border-radius: 9px;
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--text-frost);
+      text-align: left;
+      font-family: var(--font-body);
+      font-weight: 600;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .nav-item svg {
+      width: 16px;
+      height: 16px;
+      color: var(--text-muted);
+      flex-shrink: 0;
+      transition: color 0.15s ease;
+    }
+
+    .nav-item:hover {
+      background: rgba(140, 228, 255, 0.08);
+      border-color: var(--ice-edge-soft);
+      color: #ffffff;
+    }
+    .nav-item:hover svg {
+      color: var(--cryo);
+    }
+
+    .nav-item.active {
+      background: linear-gradient(90deg, rgba(140, 228, 255, 0.18) 0%, rgba(28, 92, 134, 0.14) 100%);
+      border-color: rgba(140, 228, 255, 0.36);
+      color: #ffffff;
+      box-shadow: inset 0 1px 0 rgba(235, 250, 255, 0.2);
+    }
+    .nav-item.active::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 7px;
+      bottom: 7px;
+      width: 3px;
+      background: var(--cryo);
+      box-shadow: 0 0 12px var(--cryo);
+      border-radius: 2px;
+    }
+    .nav-item.active svg {
+      color: var(--cryo);
+    }
+
+    .admin-main {
+      padding: 24px 26px 48px;
+      overflow-y: auto;
+    }
+
+    .page-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      gap: 14px;
+      flex-wrap: wrap;
+      margin-bottom: 18px;
+    }
+
+    .page-head h2 {
+      margin: 5px 0 0;
+      font-size: 21px;
+      font-weight: 700;
+    }
+
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(185px, 1fr));
+      gap: 13px;
+      margin-bottom: 20px;
+    }
+
+    .kpi-tile {
+      padding: 16px 18px;
+    }
+    .kpi-label {
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+    }
+    .kpi-val {
+      font-family: var(--font-display);
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--text-crystal);
+      margin-top: 8px;
+      font-variant-numeric: tabular-nums;
+    }
+    .kpi-val.cryo { color: var(--cryo); }
+    .kpi-val.mint { color: var(--aurora-mint); }
+    .kpi-val.amber { color: var(--beacon-amber); }
+
+    .filter-bar {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 14px;
+    }
+
+    .split-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+
+    .photo-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(175px, 1fr));
+      gap: 10px;
+    }
+
+    .photo-card {
+      background: rgba(4, 17, 29, 0.72);
+      border: 1px solid var(--ice-edge-soft);
+      border-radius: 10px;
+      padding: 8px;
+      cursor: zoom-in;
+      transition: border-color 0.15s ease, transform 0.15s ease;
+    }
+    .photo-card:hover {
+      border-color: var(--cryo);
+      transform: translateY(-2px);
+    }
+    .photo-card img {
+      width: 100%;
+      height: 122px;
+      object-fit: cover;
+      border-radius: 7px;
+      display: block;
+    }
+
+    .timeline {
+      display: flex;
+      flex-direction: column;
+      gap: 9px;
+      border-left: 1px solid var(--ice-edge);
+      padding-left: 14px;
+      margin-left: 4px;
+    }
+
+    .tl-item {
+      position: relative;
+      font-size: 12.5px;
+    }
+    .tl-item::before {
+      content: "";
+      position: absolute;
+      left: -19px;
+      top: 5px;
+      width: 8px;
+      height: 8px;
+      transform: rotate(45deg);
+      background: var(--cryo);
+      box-shadow: 0 0 8px var(--cryo);
+    }
+
+    .receipt-box {
+      background: rgba(4, 16, 28, 0.8);
+      border: 1px solid var(--ice-edge);
+      border-radius: 12px;
+      padding: 16px;
+    }
+    .receipt-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 6px 0;
+      border-bottom: 1px dashed rgba(176, 230, 255, 0.14);
+      font-size: 13px;
+    }
+    .receipt-row:last-child {
+      border-bottom: 0;
+    }
+    .receipt-total {
+      font-family: var(--font-display);
+      font-size: 22px;
+      color: var(--cryo);
+      font-weight: 800;
+    }
+
+    @media (max-width: 960px) {
+      .admin-layout {
+        grid-template-columns: 1fr;
+      }
+      .split-2 {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.8">
+          <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+        </svg>
+      </div>
+      <div class="brand-sub">
+        <span>ПУЛЬТ УПРАВЛЕНИЯ</span>
+        <small>СНЕГ-ДИСПЕТЧЕР · ADMIN CONSOLE</small>
+      </div>
+      <span class="brand-badge" id="role-badge">ВХОД</span>
+    </div>
+
+    <div class="topbar-meta">
+      <div class="msk-clock">
+        <span class="pulse-dot"></span>
+        <span data-msk-clock>--:--:-- МСК</span>
+      </div>
+      <nav class="nav-links">
+        <button class="btn btn-sm btn-ghost" onclick="toggleSnowFx(this)" title="Переключить снегопад">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <path d="M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6L5.6 18.4" />
+          </svg>
+          Снег
+        </button>
+        <a class="btn btn-sm btn-ghost" href="/">Главная</a>
+        <a class="btn btn-primary btn-sm" href="/simulator" target="_blank">Симулятор MAX ↗</a>
+        <button class="btn btn-sm btn-danger" id="logout-btn" style="display:none" onclick="logout()">Выйти</button>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Ледяное окно авторизации -->
+  <div id="login-view" class="login-wrap">
+    <div class="ice-panel ice-interactive login-monolith">
+      <div class="vault-emblem">
+        <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8">
+          <rect x="3" y="11" width="18" height="11" rx="2" />
+          <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+        </svg>
+      </div>
+      <div class="section-kicker" style="margin-bottom:8px">ЗАЩИЩЁННЫЙ КОНТУР RBAC</div>
+      <h2 style="margin:0 0 6px;font-size:21px">Авторизация диспетчера</h2>
+      <p style="color:var(--text-muted);font-size:13px;margin:0">
+        Выберите тестовую роль ниже или введите корпоративные учётные данные.
+      </p>
+
+      <div class="quick-role-row">
+        <button type="button" class="quick-role-btn" onclick="fillCreds('owner@sneg.local', 'admin12345')">
+          <b>Владелец (Owner)</b>
+          <span>Полный доступ + НПД</span>
+        </button>
+        <button type="button" class="quick-role-btn" onclick="fillCreds('foreman@sneg.local', 'foreman12345')">
+          <b>Бригадир (Foreman)</b>
+          <span>Заказы, споры, цены</span>
+        </button>
+      </div>
+
+      <form onsubmit="event.preventDefault(); doLogin();" style="display:flex;flex-direction:column;gap:12px">
+        <div>
+          <label class="field-label" for="login-email">Электронная почта</label>
+          <input class="input" id="login-email" value="owner@sneg.local" placeholder="owner@sneg.local" />
+        </div>
+        <div>
+          <label class="field-label" for="login-pass">Пароль</label>
+          <input class="input" id="login-pass" type="password" value="admin12345" placeholder="••••••••" />
+        </div>
+        <button type="submit" class="btn btn-primary" style="margin-top:4px;padding:11px 16px">
+          Войти в пульт управления →
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Рабочая область диспетчера -->
+  <div id="admin-view" class="admin-layout" style="display:none">
+    <aside class="admin-nav">
+      <div class="nav-section-label">ОПЕРАЦИИ</div>
+      <button class="nav-item active" onclick="showTab('dashboard', this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+          <rect x="3" y="3" width="7" height="9" /><rect x="14" y="3" width="7" height="5" />
+          <rect x="14" y="12" width="7" height="9" /><rect x="3" y="16" width="7" height="5" />
+        </svg>
+        Дашборд KPI
+      </button>
+      <button class="nav-item" onclick="showTab('orders', this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+          <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2" />
+          <rect x="9" y="3" width="6" height="4" rx="1" /><line x1="9" y1="12" x2="15" y2="12" /><line x1="9" y1="16" x2="13" y2="16" />
+        </svg>
+        Реестр заказов
+      </button>
+      <button class="nav-item" onclick="showTab('disputes', this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+          <path d="M12 3v18M5 8l7-3 7 3M5 8l-2 7h4l-2-7zM19 8l-2 7h4l-2-7z" />
+        </svg>
+        Споры и рекламации
+      </button>
+
+      <div class="nav-section-label">КОНФИГУРАЦИЯ</div>
+      <button class="nav-item" onclick="showTab('tariffs', this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+          <rect x="4" y="2" width="16" height="20" rx="2" /><line x1="8" y1="6" x2="16" y2="6" />
+          <line x1="8" y1="11" x2="10" y2="11" /><line x1="14" y1="11" x2="16" y2="11" />
+          <line x1="8" y1="15" x2="10" y2="15" /><line x1="14" y1="15" x2="16" y2="15" />
+        </svg>
+        Тарифы и песочница
+      </button>
+      <button class="nav-item" onclick="showTab('zones', this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+          <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6" />
+          <line x1="8" y1="2" x2="8" y2="18" /><line x1="16" y1="6" x2="16" y2="22" />
+        </svg>
+        Геозоны покрытия
+      </button>
+      <button class="nav-item" onclick="showTab('executors', this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+          <circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" />
+        </svg>
+        Исполнители и допуски
+      </button>
+
+      <div class="nav-section-label">ФИНАНСЫ И АУДИТ</div>
+      <button class="nav-item" onclick="showTab('payouts', this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+          <rect x="2" y="5" width="20" height="14" rx="2" /><line x1="2" y1="10" x2="22" y2="10" />
+        </svg>
+        Выплаты (НПД)
+      </button>
+      <button class="nav-item" onclick="showTab('audit', this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+          <polyline points="14 2 14 8 20 8" /><line x1="8" y1="13" x2="16" y2="13" /><line x1="8" y1="17" x2="13" y2="17" />
+        </svg>
+        Чаты MAX и аудит
+      </button>
+    </aside>
+
+    <main class="admin-main" id="admin-content"></main>
+  </div>
+
+  <!-- Модальное окно досье заказа -->
+  <div class="modal-backdrop" id="order-modal" onclick="if(event.target===this) closeModal()">
+    <div class="modal" id="order-modal-body"></div>
+  </div>
+
+  <div class="toast-container" id="toasts"></div>
+  <script src="/static/frost-fx.js"></script>
+  <script src="/static/admin.js"></script>
+</body>
+</html>

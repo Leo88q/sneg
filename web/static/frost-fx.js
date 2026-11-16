@@ -1,0 +1,238 @@
+/* ============================================================================
+   ARCTIC CRYO-FX: Живой снег на Canvas, блики льда, часы МСК, кастомные окна
+   ============================================================================ */
+
+(function () {
+  // 1. Живой лёгкий снегопад и морозные кристаллы на фоне
+  const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let snowEnabled = localStorage.getItem('sneg_snow_fx') !== 'off' && !reduceMotion;
+
+  function initFrostCanvas() {
+    let canvas = document.getElementById('frost-canvas');
+    if (!canvas) {
+      canvas = document.createElement('canvas');
+      canvas.id = 'frost-canvas';
+      document.body.prepend(canvas);
+    }
+    const ctx = canvas.getContext('2d');
+    let w = (canvas.width = window.innerWidth);
+    let h = (canvas.height = window.innerHeight);
+
+    const flakes = Array.from({ length: Math.min(72, Math.floor(w / 22)) }, () => ({
+      x: Math.random() * w,
+      y: Math.random() * h,
+      r: 0.7 + Math.random() * 2.1,
+      vy: 0.22 + Math.random() * 0.65,
+      vx: -0.25 + Math.random() * 0.5,
+      phase: Math.random() * Math.PI * 2,
+      crystal: Math.random() > 0.72,
+      alpha: 0.16 + Math.random() * 0.42,
+    }));
+
+    window.addEventListener('resize', () => {
+      w = canvas.width = window.innerWidth;
+      h = canvas.height = window.innerHeight;
+    });
+
+    function drawCrystal(x, y, r, alpha) {
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.strokeStyle = `rgba(210, 244, 255, ${alpha})`;
+      ctx.lineWidth = 0.8;
+      for (let i = 0; i < 3; i++) {
+        ctx.beginPath();
+        ctx.moveTo(-r * 1.9, 0);
+        ctx.lineTo(r * 1.9, 0);
+        ctx.stroke();
+        ctx.rotate(Math.PI / 3);
+      }
+      ctx.restore();
+    }
+
+    function tick() {
+      ctx.clearRect(0, 0, w, h);
+      if (snowEnabled) {
+        for (const f of flakes) {
+          f.phase += 0.012;
+          f.x += f.vx + Math.sin(f.phase) * 0.25;
+          f.y += f.vy;
+          if (f.y > h + 10) {
+            f.y = -10;
+            f.x = Math.random() * w;
+          }
+          if (f.x < -10) f.x = w + 10;
+          if (f.x > w + 10) f.x = -10;
+
+          if (f.crystal) {
+            drawCrystal(f.x, f.y, f.r, f.alpha * 0.9);
+          } else {
+            ctx.beginPath();
+            ctx.arc(f.x, f.y, f.r, 0, Math.PI * 2);
+            ctx.fillStyle = `rgba(220, 246, 255, ${f.alpha})`;
+            ctx.fill();
+          }
+        }
+      }
+      requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  }
+
+  window.toggleSnowFx = function (btn) {
+    snowEnabled = !snowEnabled;
+    localStorage.setItem('sneg_snow_fx', snowEnabled ? 'on' : 'off');
+    if (btn) btn.setAttribute('data-active', snowEnabled ? '1' : '0');
+  };
+
+  // 2. Спекулярный ледяной блик за курсором на интерактивных панелях
+  document.addEventListener('pointermove', (e) => {
+    const el = e.target.closest('.ice-interactive');
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    el.style.setProperty('--mx', `${e.clientX - rect.left}px`);
+    el.style.setProperty('--my', `${e.clientY - rect.top}px`);
+  });
+
+  // 3. Живое время МСК в шапке
+  function updateClock() {
+    const nodes = document.querySelectorAll('[data-msk-clock]');
+    if (!nodes.length) return;
+    const fmt = new Intl.DateTimeFormat('ru-RU', {
+      timeZone: 'Europe/Moscow',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    }).format(new Date());
+    nodes.forEach((n) => (n.textContent = `${fmt} МСК`));
+  }
+
+  // 4. Кастомный менеджер ледяных окон (замена стандартных prompt/alert + лайтбокс фото)
+  function ensureDialogRoot() {
+    let root = document.getElementById('ice-dialog-backdrop');
+    if (!root) {
+      root = document.createElement('div');
+      root.id = 'ice-dialog-backdrop';
+      root.className = 'modal-backdrop';
+      root.innerHTML = `<div class="modal modal-sm" id="ice-dialog-box"></div>`;
+      root.addEventListener('click', (e) => {
+        if (e.target === root && window._iceDialogCancel) window._iceDialogCancel();
+      });
+      document.body.appendChild(root);
+    }
+    return root;
+  }
+
+  function escHtml(s) {
+    return String(s ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  window.IceDialog = {
+    form({ title, subtitle = '', submitText = 'Подтвердить', submitClass = 'btn-primary', fields = [] }) {
+      return new Promise((resolve) => {
+        const root = ensureDialogRoot();
+        const box = document.getElementById('ice-dialog-box');
+        box.className = 'modal modal-sm';
+
+        const fieldsHtml = fields
+          .map((f, idx) => {
+            const id = `ice-f-${idx}`;
+            let ctrl = '';
+            if (f.type === 'select') {
+              ctrl = `<select class="input" id="${id}" name="${escHtml(f.name)}">${(f.options || [])
+                .map(
+                  (o) =>
+                    `<option value="${escHtml(o.value)}" ${o.value === f.value ? 'selected' : ''}>${escHtml(o.label)}</option>`
+                )
+                .join('')}</select>`;
+            } else if (f.type === 'textarea') {
+              ctrl = `<textarea class="input" id="${id}" name="${escHtml(f.name)}" rows="3" placeholder="${escHtml(f.placeholder || '')}">${escHtml(f.value ?? '')}</textarea>`;
+            } else {
+              ctrl = `<input class="input" id="${id}" type="${escHtml(f.type || 'text')}" name="${escHtml(f.name)}" value="${escHtml(f.value ?? '')}" placeholder="${escHtml(f.placeholder || '')}" ${f.required ? 'required' : ''} />`;
+            }
+            return `<div><label class="field-label" for="${id}">${escHtml(f.label)}</label>${ctrl}</div>`;
+          })
+          .join('');
+
+        box.innerHTML = `
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:14px">
+            <div>
+              <div class="section-kicker" style="margin-bottom:6px">ОПЕРАЦИЯ ДИСПЕТЧЕРА</div>
+              <h3 style="margin:0;font-size:17px">${escHtml(title)}</h3>
+              ${subtitle ? `<p style="margin:6px 0 0;color:var(--text-muted);font-size:13px">${escHtml(subtitle)}</p>` : ''}
+            </div>
+            <button type="button" class="btn btn-sm btn-ghost" id="ice-dlg-x">✕</button>
+          </div>
+          <form id="ice-dlg-form" style="display:flex;flex-direction:column;gap:12px">
+            ${fieldsHtml}
+            <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:6px">
+              <button type="button" class="btn btn-ghost" id="ice-dlg-cancel">Отмена</button>
+              <button type="submit" class="btn ${submitClass}">${escHtml(submitText)}</button>
+            </div>
+          </form>
+        `;
+
+        const close = (val) => {
+          root.classList.remove('open');
+          window._iceDialogCancel = null;
+          resolve(val);
+        };
+        window._iceDialogCancel = () => close(null);
+        document.getElementById('ice-dlg-x').onclick = () => close(null);
+        document.getElementById('ice-dlg-cancel').onclick = () => close(null);
+        document.getElementById('ice-dlg-form').onsubmit = (ev) => {
+          ev.preventDefault();
+          const result = {};
+          const fd = new FormData(ev.target);
+          for (const f of fields) {
+            result[f.name] = fd.get(f.name) ?? '';
+          }
+          close(result);
+        };
+
+        root.classList.add('open');
+        const firstInput = box.querySelector('input, textarea, select');
+        if (firstInput) setTimeout(() => firstInput.focus(), 40);
+      });
+    },
+
+    lightbox(url, caption = 'Фотоотчёт') {
+      const root = ensureDialogRoot();
+      const box = document.getElementById('ice-dialog-box');
+      box.className = 'modal';
+      box.style.width = 'auto';
+      box.style.maxWidth = '96vw';
+      box.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:12px">
+          <div class="section-kicker">${escHtml(caption)}</div>
+          <button type="button" class="btn btn-sm btn-ghost" id="ice-lb-close">Закрыть ✕</button>
+        </div>
+        <img class="lightbox-img" src="${escHtml(url)}" alt="${escHtml(caption)}" />
+      `;
+      const close = () => {
+        root.classList.remove('open');
+        box.style.width = '';
+        box.style.maxWidth = '';
+        window._iceDialogCancel = null;
+      };
+      window._iceDialogCancel = close;
+      document.getElementById('ice-lb-close').onclick = close;
+      root.classList.add('open');
+    },
+  };
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && window._iceDialogCancel) {
+      window._iceDialogCancel();
+    }
+  });
+
+  document.addEventListener('DOMContentLoaded', () => {
+    initFrostCanvas();
+    updateClock();
+    setInterval(updateClock, 1000);
+  });
+})();
