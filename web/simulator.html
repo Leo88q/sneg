@@ -1,0 +1,604 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Симулятор MAX · Снег-Диспетчер</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Unbounded:wght@500;600;700;800&display=swap"
+    rel="stylesheet"
+  />
+  <link rel="stylesheet" href="/static/styles.css" />
+  <style>
+    .sim-layout {
+      display: grid;
+      grid-template-columns: 300px 1fr;
+      height: calc(100vh - 59px);
+      overflow: hidden;
+    }
+
+    .sim-dock {
+      background: linear-gradient(180deg, rgba(8, 28, 44, 0.88) 0%, rgba(4, 15, 25, 0.92) 100%);
+      backdrop-filter: blur(22px);
+      border-right: 1px solid var(--ice-edge);
+      padding: 14px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .dock-block {
+      background: rgba(6, 22, 36, 0.62);
+      border: 1px solid var(--ice-edge-soft);
+      border-radius: 12px;
+      padding: 12px;
+    }
+
+    .dock-title {
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--cryo);
+      margin: 0 0 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .sim-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+    }
+
+    .geo-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+    }
+
+    .geo-chip {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      padding: 7px 9px;
+      border-radius: 8px;
+      border: 1px solid var(--ice-edge-soft);
+      background: rgba(140, 228, 255, 0.05);
+      color: var(--text-crystal);
+      cursor: pointer;
+      text-align: left;
+      transition: all 0.15s ease;
+    }
+    .geo-chip:hover {
+      border-color: var(--cryo);
+      background: rgba(140, 228, 255, 0.14);
+      transform: translateY(-1px);
+    }
+    .geo-chip .name {
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .geo-chip .coords {
+      font-family: var(--font-mono);
+      font-size: 9.5px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+    .geo-chip.out {
+      border-color: rgba(255, 100, 127, 0.25);
+      background: rgba(255, 100, 127, 0.06);
+    }
+    .geo-chip.out:hover {
+      border-color: var(--frost-crimson);
+      background: rgba(255, 100, 127, 0.16);
+    }
+
+    .sim-columns {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(280px, 1fr));
+      gap: 12px;
+      padding: 12px;
+      overflow-x: auto;
+      height: 100%;
+    }
+
+    .chat-pane {
+      position: relative;
+      background: linear-gradient(
+        165deg,
+        rgba(17, 50, 76, 0.72) 0%,
+        rgba(7, 24, 39, 0.84) 50%,
+        rgba(4, 16, 27, 0.92) 100%
+      );
+      backdrop-filter: blur(22px) saturate(145%);
+      border: 1px solid var(--ice-edge);
+      border-radius: 14px;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      overflow: hidden;
+      box-shadow: var(--shadow-ice);
+    }
+
+    .chat-pane::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 2px;
+      z-index: 2;
+    }
+    .pane-client::before {
+      background: linear-gradient(90deg, transparent, var(--cryo), transparent);
+    }
+    .pane-dispatch::before {
+      background: linear-gradient(90deg, transparent, var(--beacon-amber), transparent);
+    }
+    .pane-worker::before {
+      background: linear-gradient(90deg, transparent, var(--aurora-mint), transparent);
+    }
+
+    .chat-header {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--ice-edge-soft);
+      background: rgba(8, 28, 45, 0.76);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .chat-header-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .chat-title {
+      font-family: var(--font-display);
+      font-weight: 700;
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--text-crystal);
+    }
+
+    .pane-dot {
+      width: 8px;
+      height: 8px;
+      transform: rotate(45deg);
+      flex-shrink: 0;
+    }
+    .pane-dot.cryo { background: var(--cryo); box-shadow: 0 0 10px var(--cryo); }
+    .pane-dot.amber { background: var(--beacon-amber); box-shadow: 0 0 10px var(--beacon-amber); }
+    .pane-dot.mint { background: var(--aurora-mint); box-shadow: 0 0 10px var(--aurora-mint); }
+
+    .tab-row {
+      display: flex;
+      gap: 5px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .tab-btn {
+      padding: 4px 10px;
+      border: 1px solid var(--ice-edge-soft);
+      background: rgba(4, 17, 29, 0.65);
+      color: var(--text-muted);
+      font-family: var(--font-body);
+      font-size: 11.5px;
+      font-weight: 600;
+      cursor: pointer;
+      clip-path: var(--cut-sm);
+      transition: all 0.15s ease;
+    }
+    .tab-btn:hover {
+      color: var(--text-crystal);
+      border-color: var(--ice-edge-strong);
+    }
+    .tab-btn.active {
+      background: linear-gradient(135deg, rgba(168, 232, 255, 0.28), rgba(36, 169, 220, 0.45));
+      border-color: var(--cryo);
+      color: #ffffff;
+    }
+
+    .chat-messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 11px;
+    }
+
+    .msg {
+      max-width: 93%;
+      padding: 10px 13px;
+      border-radius: 12px;
+      font-size: 13px;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      word-break: break-word;
+      position: relative;
+    }
+
+    .msg-bot {
+      align-self: flex-start;
+      background: linear-gradient(155deg, rgba(200, 238, 255, 0.11) 0%, rgba(12, 39, 62, 0.82) 100%);
+      border: 1px solid rgba(176, 230, 255, 0.22);
+      border-top-left-radius: 3px;
+      box-shadow: 0 8px 20px rgba(2, 10, 18, 0.32), inset 0 1px 0 rgba(235, 250, 255, 0.2);
+    }
+
+    .msg-user {
+      align-self: flex-end;
+      background: linear-gradient(145deg, rgba(46, 176, 226, 0.34) 0%, rgba(16, 84, 122, 0.72) 100%);
+      border: 1px solid rgba(140, 228, 255, 0.4);
+      border-top-right-radius: 3px;
+      box-shadow: 0 8px 20px rgba(2, 10, 18, 0.32), inset 0 1px 0 rgba(220, 248, 255, 0.3);
+    }
+
+    .msg-meta {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--text-muted);
+      margin-bottom: 5px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .edited-tag {
+      color: var(--beacon-amber);
+      font-weight: 700;
+      letter-spacing: 0.04em;
+    }
+
+    .msg-img {
+      max-width: 100%;
+      max-height: 170px;
+      border-radius: 9px;
+      border: 1px solid var(--ice-edge);
+      margin-top: 8px;
+      display: block;
+      cursor: zoom-in;
+      transition: transform 0.15s ease, border-color 0.15s ease;
+    }
+    .msg-img:hover {
+      transform: scale(1.015);
+      border-color: var(--cryo);
+    }
+
+    .kb {
+      margin-top: 9px;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    .kb-row {
+      display: flex;
+      gap: 5px;
+      flex-wrap: wrap;
+    }
+    .kb-btn {
+      flex: 1;
+      min-width: 88px;
+      padding: 7px 10px;
+      border: 1px solid rgba(154, 224, 255, 0.3);
+      background: linear-gradient(180deg, rgba(168, 232, 255, 0.13) 0%, rgba(11, 41, 66, 0.8) 100%);
+      color: #dcf5ff;
+      font-family: var(--font-body);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      text-align: center;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      clip-path: var(--cut-sm);
+      transition: all 0.14s ease;
+    }
+    .kb-btn:hover {
+      background: linear-gradient(180deg, rgba(196, 240, 255, 0.26) 0%, rgba(22, 68, 104, 0.92) 100%);
+      border-color: var(--cryo);
+      color: #ffffff;
+      transform: translateY(-1px);
+    }
+    .kb-btn-link {
+      border-color: rgba(66, 232, 176, 0.5);
+      background: linear-gradient(180deg, rgba(66, 232, 176, 0.22) 0%, rgba(10, 76, 56, 0.78) 100%);
+      color: #d6fff2;
+    }
+    .kb-btn-geo {
+      border-color: rgba(255, 170, 59, 0.5);
+      background: linear-gradient(180deg, rgba(255, 170, 59, 0.22) 0%, rgba(92, 46, 8, 0.78) 100%);
+      color: #ffe8c4;
+    }
+
+    .chat-footer {
+      padding: 10px 12px;
+      border-top: 1px solid var(--ice-edge-soft);
+      background: rgba(5, 20, 33, 0.84);
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+    }
+
+    .chat-input-row {
+      display: flex;
+      gap: 6px;
+    }
+
+    .mini-list {
+      font-size: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .mini-item {
+      background: rgba(11, 35, 55, 0.65);
+      border: 1px solid var(--ice-edge-soft);
+      border-radius: 8px;
+      padding: 8px 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }
+
+    @media (max-width: 1160px) {
+      .sim-layout {
+        grid-template-columns: 1fr;
+        height: auto;
+        overflow: visible;
+      }
+      .sim-columns {
+        grid-template-columns: 1fr;
+        height: auto;
+      }
+      .chat-pane {
+        min-height: 480px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.8">
+          <path d="M12 2v20M2 12h20M4.93 4.93l14.14 14.14M19.07 4.93L4.93 19.07" />
+        </svg>
+      </div>
+      <div class="brand-sub">
+        <span>СИМУЛЯТОР MAX-БОТА</span>
+        <small>LIVE MULTI-CHAT DISPATCH WALL</small>
+      </div>
+      <span class="brand-badge" id="ws-badge">LIVE WS</span>
+    </div>
+
+    <div class="topbar-meta">
+      <div class="msk-clock">
+        <span class="pulse-dot"></span>
+        <span data-msk-clock>--:--:-- МСК</span>
+      </div>
+      <nav class="nav-links">
+        <button class="btn btn-sm btn-ghost" onclick="toggleSnowFx(this)" title="Переключить снегопад">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <path d="M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6L5.6 18.4" />
+          </svg>
+          Снег
+        </button>
+        <a class="btn btn-sm btn-ghost" href="/">Главная</a>
+        <a class="btn btn-success btn-sm" href="/admin" target="_blank">Веб-админка ↗</a>
+      </nav>
+    </div>
+  </header>
+
+  <div class="sim-layout">
+    <aside class="sim-dock">
+      <div class="dock-block">
+        <div class="dock-title">
+          <span>СЦЕНАРНЫЕ ТРИГГЕРЫ</span>
+          <span class="mono" style="color:var(--text-muted)">CMD</span>
+        </div>
+        <div class="sim-actions">
+          <button class="btn btn-success" onclick="payLatest('succeeded')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="2" y="5" width="20" height="14" rx="2" /><line x1="2" y1="10" x2="22" y2="10" />
+            </svg>
+            Оплатить последний СБП
+          </button>
+          <button class="btn btn-warn" onclick="raceTake()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+            </svg>
+            Гонка «Беру» (Иван vs Сергей)
+          </button>
+          <button class="btn" onclick="runTimers()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="9" /><polyline points="12 7 12 12 15 15" />
+            </svg>
+            Прогнать таймеры (SLA / 24ч)
+          </button>
+          <button class="btn" onclick="triggerWeather()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 2v20M2 12h20M4.9 4.9l14.2 14.2M19.1 4.9L4.9 19.1" />
+            </svg>
+            Снегопад 15 см · Малаховка
+          </button>
+          <button class="btn btn-danger btn-sm" onclick="resetSim()">Очистить ленту чатов</button>
+        </div>
+      </div>
+
+      <div class="dock-block">
+        <div class="dock-title">
+          <span>ГЕО-РАДАР КЛИЕНТА</span>
+          <span class="mono" style="color:var(--text-muted)">GPS</span>
+        </div>
+        <div class="geo-grid">
+          <button class="geo-chip" onclick="sendGeoPreset(55.6435, 38.0068)">
+            <span class="name">Малаховка</span>
+            <span class="coords">55.643°N 38.007°E</span>
+          </button>
+          <button class="geo-chip" onclick="sendGeoPreset(55.6546, 37.9493)">
+            <span class="name">Томилино</span>
+            <span class="coords">55.655°N 37.949°E</span>
+          </button>
+          <button class="geo-chip" onclick="sendGeoPreset(55.6562, 37.9918)">
+            <span class="name">Красково</span>
+            <span class="coords">55.656°N 37.992°E</span>
+          </button>
+          <button class="geo-chip" onclick="sendGeoPreset(55.6352, 38.0812)">
+            <span class="name">Быково</span>
+            <span class="coords">55.635°N 38.081°E</span>
+          </button>
+          <button class="geo-chip" onclick="sendGeoPreset(55.5798, 37.9032)">
+            <span class="name">Лыткарино</span>
+            <span class="coords">55.580°N 37.903°E</span>
+          </button>
+          <button class="geo-chip out" onclick="sendGeoPreset(55.7558, 37.6173)">
+            <span class="name">Москва (вне)</span>
+            <span class="coords">55.756°N 37.617°E</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="dock-block">
+        <div class="dock-title">
+          <span>ОЖИДАЮТ ОПЛАТЫ СБП</span>
+          <span class="mono" id="pending-count">0</span>
+        </div>
+        <div class="mini-list" id="pending-payments-list">
+          <span style="color:var(--text-muted)">Нет ожидающих счетов</span>
+        </div>
+      </div>
+
+      <div class="dock-block">
+        <div class="dock-title">
+          <span>АКТИВНЫЕ ЗАКАЗЫ</span>
+          <span class="mono" id="orders-count">0</span>
+        </div>
+        <div class="mini-list" id="recent-orders-list">
+          <span style="color:var(--text-muted)">Пока нет заказов</span>
+        </div>
+      </div>
+    </aside>
+
+    <section class="sim-columns">
+      <!-- Окно 1: Клиент -->
+      <div class="chat-pane pane-client">
+        <div class="chat-header">
+          <div class="chat-header-row">
+            <span class="chat-title"><span class="pane-dot cryo"></span>ЧАТ КЛИЕНТА</span>
+            <button class="btn btn-primary btn-sm" onclick="botStart(activeClient)">/start</button>
+          </div>
+          <div class="tab-row">
+            <button class="tab-btn active" id="tab-client_1" onclick="switchClient('client_1')">Анна · Клиент 1</button>
+            <button class="tab-btn" id="tab-client_2" onclick="switchClient('client_2')">Дмитрий · Сосед</button>
+          </div>
+        </div>
+        <div class="chat-messages" id="msgs-client"></div>
+        <div class="chat-footer">
+          <div class="tab-row">
+            <button class="btn btn-sm btn-ghost" onclick="uploadDemoPhoto(activeClient, 'car_stuck', 'Застряла у въезда в СНТ')">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                <circle cx="12" cy="13" r="4" />
+              </svg>
+              Фото авто
+            </button>
+            <button class="btn btn-sm btn-ghost" onclick="sendContact(activeClient)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="5" y="2" width="14" height="20" rx="2" /><line x1="12" y1="18" x2="12.01" y2="18" />
+              </svg>
+              request_contact
+            </button>
+          </div>
+          <div class="chat-input-row">
+            <input
+              class="input"
+              id="input-client"
+              placeholder="Адрес, площадь м², телефон или сообщение боту..."
+              onkeydown="if(event.key==='Enter') sendText(activeClient, 'input-client')"
+            />
+            <button class="btn btn-primary btn-sm" onclick="sendText(activeClient, 'input-client')">→</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Окно 2: Общий чат бригады -->
+      <div class="chat-pane pane-dispatch">
+        <div class="chat-header">
+          <div class="chat-header-row">
+            <span class="chat-title"><span class="pane-dot amber"></span>БИРЖА БРИГАДЫ</span>
+            <span class="pill pill-warn">БЕЗ АДРЕСА</span>
+          </div>
+          <div class="tab-row">
+            <span class="mono" style="font-size:10px;color:var(--text-muted)">КЛИК «БЕРУ» ОТ:</span>
+            <button class="tab-btn active" id="tab-taker-executor_1" onclick="switchTaker('executor_1')">Иван</button>
+            <button class="tab-btn" id="tab-taker-executor_2" onclick="switchTaker('executor_2')">Сергей</button>
+            <button class="tab-btn" id="tab-taker-foreman_1" onclick="switchTaker('foreman_1')">Бригадир</button>
+          </div>
+        </div>
+        <div class="chat-messages" id="msgs-dispatch"></div>
+        <div class="chat-footer">
+          <div class="mono" style="font-size:10.5px;color:var(--text-muted)">
+            После оплаты аванса карточка публикуется сюда и обновляется через <code>PUT /messages</code> при захвате.
+          </div>
+        </div>
+      </div>
+
+      <!-- Окно 3: Исполнитель / Бригадир -->
+      <div class="chat-pane pane-worker">
+        <div class="chat-header">
+          <div class="chat-header-row">
+            <span class="chat-title"><span class="pane-dot mint"></span>ИСПОЛНИТЕЛЬ / БРИГАДИР</span>
+            <button class="btn btn-primary btn-sm" onclick="botStart(activeWorker)">/start</button>
+          </div>
+          <div class="tab-row">
+            <button class="tab-btn active" id="tab-executor_1" onclick="switchWorker('executor_1')">Иван · Исп. 1</button>
+            <button class="tab-btn" id="tab-executor_2" onclick="switchWorker('executor_2')">Сергей · Трактор</button>
+            <button class="tab-btn" id="tab-foreman_1" onclick="switchWorker('foreman_1')">Алексей · Бригадир</button>
+          </div>
+        </div>
+        <div class="chat-messages" id="msgs-worker"></div>
+        <div class="chat-footer">
+          <div class="tab-row">
+            <button class="btn btn-sm btn-ghost" onclick="uploadDemoPhoto(activeWorker, 'before', '')">Фото ДО</button>
+            <button class="btn btn-sm btn-ghost" onclick="uploadDemoPhoto(activeWorker, 'after', '')">Фото ПОСЛЕ</button>
+            <label class="btn btn-sm btn-ghost" style="margin:0">
+              Свой файл
+              <input type="file" accept="image/*" style="display:none" onchange="uploadRealPhoto(activeWorker, this)" />
+            </label>
+          </div>
+          <div class="chat-input-row">
+            <input
+              class="input"
+              id="input-worker"
+              placeholder="Ответ, новая цена или сообщение клиенту..."
+              onkeydown="if(event.key==='Enter') sendText(activeWorker, 'input-worker')"
+            />
+            <button class="btn btn-primary btn-sm" onclick="sendText(activeWorker, 'input-worker')">→</button>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div class="toast-container" id="toasts"></div>
+  <script src="/static/frost-fx.js"></script>
+  <script src="/static/simulator.js"></script>
+</body>
+</html>
