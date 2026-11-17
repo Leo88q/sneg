@@ -152,8 +152,8 @@ def calculate_price(
     executor_share_override: Decimal | None = None,
 ) -> PriceBreakdown:
     step = int(tariff_config.get("rounding_step_rub", 50))
-    min_order_total = to_decimal(tariff_config.get("min_order_total_rub", 1500))
-    min_advance = to_decimal(tariff_config.get("min_advance_rub", 500))
+    min_order_total = to_decimal(tariff_config.get("min_order_total_rub", 2000))
+    min_advance = to_decimal(tariff_config.get("min_advance_rub", 700))
     night_active = (
         inp.force_night if inp.force_night is not None else is_night_msk(now_utc, tariff_config)
     )
@@ -285,7 +285,7 @@ def calculate_price(
         )
         floor_add = ZERO
         if svc == ServiceType.MOVERS and inp.floors_without_lift > 0:
-            floor_rate = to_decimal(hcfg.get("floor_no_lift_surcharge_per_worker", 150))
+            floor_rate = to_decimal(hcfg.get("floor_no_lift_surcharge_per_worker", 200))
             floor_add = floor_rate * Decimal(inp.floors_without_lift) * Decimal(inp.workers_count)
         equip_add = to_decimal(hcfg.get("equipment_fee", 1500)) if inp.needs_equipment else ZERO
         extras_cost = (floor_add + equip_add).quantize(Decimal("0.01"))

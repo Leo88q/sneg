@@ -536,6 +536,7 @@ function applyMarket2026Tariff() {
     const area = document.getElementById('tariff-json');
     const cfg = JSON.parse(area.value);
     cfg.min_order_total_rub = 2000;
+    cfg.min_advance_rub = 700;
     if (cfg.snow && cfg.snow.methods) {
       if (cfg.snow.methods.manual) {
         cfg.snow.methods.manual.rate_per_m2 = 40;
@@ -551,16 +552,25 @@ function applyMarket2026Tariff() {
       }
     }
     if (cfg.snow && cfg.snow.snow_removal) {
-      cfg.snow.snow_removal.rate_per_m3 = 550;
-      cfg.snow.snow_removal.min_price = 6000;
+      cfg.snow.snow_removal.rate_per_m3 = 600;
+      cfg.snow.snow_removal.min_removal_price = 7500;
+      delete cfg.snow.snow_removal.min_price;
+    }
+    if (cfg.hourly) {
+      cfg.hourly.yard_help_rate_per_hour = 700;
+      cfg.hourly.movers_rate_per_hour = 750;
+      cfg.hourly.floor_no_lift_surcharge_per_worker = 200;
     }
     if (cfg.roof_and_reagents) {
+      cfg.roof_and_reagents.roof_rate_per_m2 = 90;
+      cfg.roof_and_reagents.roof_min_price = 6000;
+      cfg.roof_and_reagents.reagents_rate_per_m2 = 20;
       cfg.roof_and_reagents.reagents_min_price = 1000;
     }
     area.value = JSON.stringify(cfg, null, 2);
     const commentEl = document.getElementById('tariff-comment');
     if (commentEl && !commentEl.value.trim()) {
-      commentEl.value = 'Актуализация прайса МО 2026 (Люберцы / Малаховка)';
+      commentEl.value = 'Рыночный прайс МО 2026 (Люберцы / Малаховка)';
     }
     runPreview();
     toast('Подставлены рыночные ставки МО 2026 — проверьте смету справа и нажмите «Сохранить»');

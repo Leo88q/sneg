@@ -506,7 +506,7 @@ class OrderOrchestrator:
                 )
             ).scalars().all()
             step = int(tariff.config_json.get("rounding_step_rub", 50))
-            min_total = to_decimal(tariff.config_json.get("min_order_total_rub", 1500))
+            min_total = to_decimal(tariff.config_json.get("min_order_total_rub", 2000))
             for peer in peers:
                 snap = peer.pricing_snapshot or {}
                 subtotal = (

@@ -46,9 +46,14 @@ async def test_public_catalog_and_live_quote_across_services(client: Any) -> Non
     cat = cat_resp.json()
 
     assert cat["brand_name"] == "ЧистоДвор"
-    assert cat["min_order_total_rub"] >= 1500
+    assert cat["min_order_total_rub"] == 2000
     assert cat["phone"] == "+7 (977) 924-02-93"
     assert len(cat["services"]) == 7
+    svc_by_code = {s["code"]: s for s in cat["services"]}
+    assert svc_by_code["snow_yard"]["price_from_label"] == "от 40 ₽/м²"
+    assert svc_by_code["snow_road"]["price_from_label"] == "от 20 ₽/м²"
+    assert svc_by_code["movers"]["price_from_label"] == "от 750 ₽/ч"
+    assert svc_by_code["reagents"]["price_from_label"] == "от 20 ₽/м²"
     zone_codes = {z["code"] for z in cat["zones"]}
     assert {"malakhovka", "tomilino", "kraskovo", "bykovo", "lytkarino"}.issubset(zone_codes)
 

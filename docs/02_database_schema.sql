@@ -583,12 +583,12 @@ INSERT INTO tariff_configs (version, is_active, comment, config_json)
 VALUES (
     1,
     TRUE,
-    'Стартовая конфигурация тарифов (ТЗ v2.0, раздел B7.1 — подлежит утверждению владельцем)',
+    'Рыночный прайс МО 2026 (Люберцы / Малаховка)',
     '{
       "rounding_step_rub": 50,
       "night_window_msk": {"start_hour": 22, "end_hour": 7},
-      "min_order_total_rub": 1500,
-      "min_advance_rub": 500,
+      "min_order_total_rub": 2000,
+      "min_advance_rub": 700,
       "advance_pct_by_service": {
         "snow_yard": 30,
         "snow_road": 30,
@@ -613,12 +613,12 @@ VALUES (
         "depth_avg_m": {"up_to_10": 0.08, "from_10_to_30": 0.20, "over_30": 0.40},
         "urgency_coeff": {"today": 1.0, "within_3h": 1.3, "now_or_night": 1.5},
         "methods": {
-          "manual": {"rate_per_m2": 25, "min_work_price": 1500},
-          "snowblower_or_miniloader": {"rate_per_m2": 20, "min_work_price": 2500},
-          "tractor": {"rate_per_m2": 15, "min_work_price": 4500}
+          "manual": {"rate_per_m2": 40, "min_work_price": 2500},
+          "snowblower_or_miniloader": {"rate_per_m2": 30, "min_work_price": 3000},
+          "tractor": {"rate_per_m2": 20, "min_work_price": 5000}
         },
         "auto_select_thresholds_m2": {"manual_max": 80, "small_tech_max": 400},
-        "snow_removal": {"rate_per_m3": 450, "min_removal_price": 3000}
+        "snow_removal": {"rate_per_m3": 600, "min_removal_price": 7500}
       },
       "car_rescue": {
         "base_price": 2500,
@@ -631,15 +631,15 @@ VALUES (
       "hourly": {
         "min_hours": 2,
         "yard_help_rate_per_hour": 700,
-        "movers_rate_per_hour": 850,
-        "floor_no_lift_surcharge_per_worker": 150,
+        "movers_rate_per_hour": 750,
+        "floor_no_lift_surcharge_per_worker": 200,
         "equipment_fee": 1500
       },
       "roof_and_reagents": {
         "roof_rate_per_m2": 90,
-        "roof_min_price": 5000,
-        "reagents_rate_per_m2": 15,
-        "reagents_min_price": 800
+        "roof_min_price": 6000,
+        "reagents_rate_per_m2": 20,
+        "reagents_min_price": 1000
       },
       "group_discount_tiers": [
         {"min_orders": 2, "discount_pct": 10},

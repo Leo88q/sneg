@@ -116,7 +116,7 @@ async def seed_initial_data(session: AsyncSession, settings: Settings) -> None:
                 )
             )
 
-    # 2. Стартовый активный тариф v1
+    # 2. Стартовый активный тариф v1 (рыночный прайс МО 2026)
     active_tariff = (
         await session.execute(select(TariffConfig).where(TariffConfig.is_active.is_(True)))
     ).scalar_one_or_none()
@@ -126,7 +126,7 @@ async def seed_initial_data(session: AsyncSession, settings: Settings) -> None:
                 version=1,
                 is_active=True,
                 config_json=get_default_tariff_config(),
-                comment="Стартовая конфигурация тарифов (ТЗ v2.0, раздел B7.1)",
+                comment="Рыночный прайс МО 2026 (Люберцы / Малаховка)",
             )
         )
 
