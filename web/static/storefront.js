@@ -1,6 +1,5 @@
 /* ============================================================================
-   ЧИСТОДВОР · Витрина, живой калькулятор тарифов и онлайн-заказ
-   Работает поверх /api/v1/public/catalog, /orders/quote, /orders и /status
+   ЧИСТОДВОР · Упрощённый зимний заказ (3 шага) и живой калькулятор тарифов
    ============================================================================ */
 
 (function () {
@@ -20,6 +19,10 @@
     movers:
       '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 8l-9-5-9 5v8l9 5 9-5V8z"/><path d="M3 8l9 5 9-5M12 13v9"/></svg>',
   };
+
+  const PRIMARY_SERVICES = ['snow_yard', 'snow_road', 'car_rescue', 'roof_cleaning'];
+  const DEPTH_SHORT = { up_to_10: 'до 10 см', from_10_to_30: '10–30 см', over_30: '30+ см' };
+  const URGENCY_SHORT = { today: 'сегодня', within_3h: 'за 3 ч', now_or_night: 'срочно' };
 
   const state = {
     catalog: null,
@@ -80,7 +83,7 @@
     if (state.service === 'snow_yard') {
       return {
         ...base,
-        area_m2: Number(state.area_m2) || 80,
+        area_m2: Number(state.area_m2) || 100,
         depth_bucket: state.depth_bucket,
         access_constraint: state.access_constraint,
         snow_removal: Boolean(state.snow_removal),
@@ -114,43 +117,65 @@
       };
     }
     if (state.service === 'roof_cleaning') {
-      return {
-        ...base,
-        area_m2: Number(state.area_m2) || 80,
-      };
+      return { ...base, area_m2: Number(state.area_m2) || 100 };
     }
     if (state.service === 'reagents') {
-      return {
-        ...base,
-        area_m2: Number(state.area_m2) || 100,
-        as_addon: Boolean(state.as_addon),
-      };
+      return { ...base, area_m2: Number(state.area_m2) || 100, as_addon: Boolean(state.as_addon) };
     }
     return base;
   }
 
+  function syncHeroPrices() {
+    if (!state.catalog) return;
+    const minEl = document.getElementById('hero-min-price');
+    if (minEl && state.catalog.min_order_total_rub) {
+      minEl.textContent = `от ${fmtRub(state.catalog.min_order_total_rub)}`;
+    }
+    const byCode = {};
+    for (const s of state.catalog.services || []) byCode[s.code] = s;
+    document.querySelectorAll('[data-quick-price]').forEach((el) => {
+      const code = el.getAttribute('data-quick-price');
+      if (byCode[code]) el.textContent = byCode[code].price_from_label;
+    });
+  }
+
   function renderServiceTabs() {
-    const wrap = document.getElementById('service-selector-grid');
-    if (!wrap || !state.catalog) return;
-    wrap.innerHTML = state.catalog.services
-      .map((s) => {
-        const active = s.code === state.service ? 'active' : '';
-        return `
-          <button type="button" class="svc-tab ${active}" data-svc="${esc(s.code)}">
-            <span class="svc-tab-ico">${SERVICE_ICONS[s.code] || ''}</span>
-            <span class="svc-tab-text">
-              <strong>${esc(s.short_title)}</strong>
-              <small>${esc(s.price_from_label)}</small>
-            </span>
-          </button>
-        `;
-      })
+    const primaryWrap = document.getElementById('service-primary-grid');
+    const moreWrap = document.getElementById('service-secondary-row');
+    if (!primaryWrap || !state.catalog) return;
+
+    const primary = state.catalog.services.filter((s) => PRIMARY_SERVICES.includes(s.code));
+    const secondary = state.catalog.services.filter((s) => !PRIMARY_SERVICES.includes(s.code));
+
+    primaryWrap.innerHTML = primary
+      .map(
+        (s) => `
+      <button type="button" class="svc-tab ${s.code === state.service ? 'active' : ''}" data-svc="${esc(s.code)}">
+        <span class="svc-tab-ico">${SERVICE_ICONS[s.code] || ''}</span>
+        <span class="svc-tab-text">
+          <strong>${esc(s.short_title)}</strong>
+          <small>${esc(s.price_from_label)}</small>
+        </span>
+      </button>
+    `
+      )
       .join('');
 
-    wrap.querySelectorAll('[data-svc]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        selectService(btn.getAttribute('data-svc'), false);
-      });
+    if (moreWrap) {
+      moreWrap.innerHTML = secondary
+        .map(
+          (s) => `
+        <button type="button" class="svc-mini-chip ${s.code === state.service ? 'active' : ''}" data-svc="${esc(s.code)}">
+          <span>${esc(s.short_title)}</span>
+          <small>${esc(s.price_from_label)}</small>
+        </button>
+      `
+        )
+        .join('');
+    }
+
+    document.querySelectorAll('[data-svc]').forEach((btn) => {
+      btn.addEventListener('click', () => selectService(btn.getAttribute('data-svc'), false));
     });
   }
 
@@ -175,7 +200,7 @@
             <div class="svc-min">мин. ${fmtRub(s.min_price_rub)} · аванс ${s.advance_pct}%</div>
           </div>
           <button type="button" class="btn btn-sm btn-primary" data-pick-svc="${esc(s.code)}">
-            Рассчитать →
+            Заказать →
           </button>
         </div>
       </article>
@@ -184,22 +209,33 @@
       .join('');
 
     grid.querySelectorAll('[data-pick-svc]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        selectService(btn.getAttribute('data-pick-svc'), true);
-      });
+      btn.addEventListener('click', () => selectService(btn.getAttribute('data-pick-svc'), true));
     });
   }
 
   function renderZones() {
     if (!state.catalog) return;
-    const selectEl = document.getElementById('order-zone');
-    if (selectEl) {
-      selectEl.innerHTML = state.catalog.zones
+    const pillsWrap = document.getElementById('order-zone-pills');
+    if (pillsWrap) {
+      pillsWrap.innerHTML = state.catalog.zones
         .map(
-          (z) =>
-            `<option value="${esc(z.code)}" ${z.code === state.zone_code ? 'selected' : ''}>${esc(z.name)} (выезд ${fmtRub(z.dispatch_fee)})</option>`
+          (z) => `
+        <button type="button" class="zone-pick-pill ${z.code === state.zone_code ? 'active' : ''}" data-zone-pick="${esc(z.code)}">
+          <strong>${esc(z.name)}</strong>
+          <small>выезд ${fmtRub(z.dispatch_fee)}</small>
+        </button>
+      `
         )
         .join('');
+
+      pillsWrap.querySelectorAll('[data-zone-pick]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          state.zone_code = btn.getAttribute('data-zone-pick');
+          pillsWrap.querySelectorAll('[data-zone-pick]').forEach((b) => b.classList.remove('active'));
+          btn.classList.add('active');
+          scheduleQuote();
+        });
+      });
     }
 
     const heroZones = document.getElementById('hero-zones-list');
@@ -231,6 +267,28 @@
     `;
   }
 
+  function detailsSummaryText() {
+    const svc = state.service;
+    if (svc === 'snow_yard' || svc === 'snow_road') {
+      const bits = [
+        DEPTH_SHORT[state.depth_bucket] || '10–30 см',
+        URGENCY_SHORT[state.urgency] || 'сегодня',
+      ];
+      if (state.snow_removal) bits.push('с вывозом');
+      return bits.join(' · ');
+    }
+    if (svc === 'car_rescue') {
+      return `${state.distance_km} км от базы · ${state.is_urgent_rescue ? 'срочно' : 'обычный'}`;
+    }
+    if (svc === 'yard_help' || svc === 'movers') {
+      return `${state.workers_count} чел · ${state.hours} ч`;
+    }
+    if (svc === 'reagents') {
+      return state.as_addon ? 'в паре с уборкой (выезд 0 ₽)' : 'отдельный выезд';
+    }
+    return `~${state.area_m2} м²`;
+  }
+
   function renderDynamicParams() {
     const box = document.getElementById('order-dynamic-params');
     if (!box) return;
@@ -239,210 +297,279 @@
     let html = '';
 
     if (svc === 'snow_yard') {
+      const presets = [
+        { val: 50, title: 'Небольшой двор', sub: '~50 м² · дорожки' },
+        { val: 100, title: 'Стандартный', sub: '~100 м² · двор + парковка' },
+        { val: 200, title: 'Большой участок', sub: '~200 м² · вся площадка' },
+        { val: 400, title: 'Крупная территория', sub: '~400 м² · техника' },
+      ];
       html = `
-        <div class="param-block">
-          <div class="param-row-head">
-            <label class="field-label" for="p-area">Площадь уборки (м²)</label>
-            <div class="preset-chips">
-              ${[50, 100, 200, 400]
-                .map(
-                  (v) =>
-                    `<button type="button" class="preset-chip ${Number(state.area_m2) === v ? 'active' : ''}" data-preset-area="${v}">${v} м²</button>`
-                )
-                .join('')}
+        <div class="size-cards-grid">
+          ${presets
+            .map(
+              (p) => `
+            <button type="button" class="size-card ${Number(state.area_m2) === p.val ? 'active' : ''}" data-preset-area="${p.val}">
+              <strong>${p.title}</strong>
+              <span>${p.sub}</span>
+            </button>
+          `
+            )
+            .join('')}
+        </div>
+
+        <details class="details-drawer">
+          <summary>
+            <span>Уточнить площадь, глубину снега, срочность или вывоз</span>
+            <span class="details-badge" id="details-summary-badge">${esc(detailsSummaryText())}</span>
+          </summary>
+          <div class="details-body">
+            <div class="param-block">
+              <label class="field-label" for="p-area">Точная площадь (м²)</label>
+              <div class="range-input-row">
+                <input type="range" class="ice-range" id="p-area-range" min="10" max="1000" step="10" value="${Math.min(1000, Number(state.area_m2) || 100)}" />
+                <input type="number" class="input mono" id="p-area" min="10" max="10000" step="5" value="${Number(state.area_m2) || 100}" style="width:104px" />
+              </div>
             </div>
+
+            <div class="param-block">
+              <label class="field-label">Глубина снега</label>
+              ${renderPillGroup('depth_bucket', state.depth_bucket, [
+                { value: 'up_to_10', label: 'До 10 см', hint: '×1.0' },
+                { value: 'from_10_to_30', label: '10–30 см', hint: '×1.5' },
+                { value: 'over_30', label: 'Более 30 см', hint: '×2.0' },
+              ])}
+            </div>
+
+            <div class="param-block">
+              <label class="field-label">Заезд на участок</label>
+              ${renderPillGroup('access_constraint', state.access_constraint, [
+                { value: 'narrow_gate', label: 'Узкая калитка', hint: 'Вручную' },
+                { value: 'standard', label: 'Ворота', hint: 'Снегоуборщик' },
+                { value: 'wide_road', label: 'Широкий въезд', hint: 'Трактор' },
+              ])}
+            </div>
+
+            <div class="param-block">
+              <label class="field-label">Срочность</label>
+              ${renderPillGroup('urgency', state.urgency, [
+                { value: 'today', label: 'Сегодня', hint: 'Базовый' },
+                { value: 'within_3h', label: 'За 3 часа', hint: '×1.3' },
+                { value: 'now_or_night', label: 'Срочно / ночь', hint: '×1.5' },
+              ])}
+            </div>
+
+            <label class="ice-check">
+              <input type="checkbox" id="p-snow-removal" ${state.snow_removal ? 'checked' : ''} />
+              <span><strong>Добавить вывоз снега с участка</strong></span>
+            </label>
           </div>
-          <div class="range-input-row">
-            <input type="range" id="p-area-range" min="10" max="1000" step="10" value="${Math.min(1000, Number(state.area_m2) || 100)}" />
-            <input type="number" class="input mono" id="p-area" min="10" max="10000" step="5" value="${Number(state.area_m2) || 100}" style="width:110px" />
-          </div>
-        </div>
-
-        <div class="param-block">
-          <label class="field-label">Глубина снега</label>
-          ${renderPillGroup('depth_bucket', state.depth_bucket, [
-            { value: 'up_to_10', label: 'До 10 см', hint: '×1.0' },
-            { value: 'from_10_to_30', label: '10–30 см', hint: '×1.5' },
-            { value: 'over_30', label: 'Более 30 см', hint: '×2.0' },
-          ])}
-        </div>
-
-        <div class="param-block">
-          <label class="field-label">Ширина заезда на участок</label>
-          ${renderPillGroup('access_constraint', state.access_constraint, [
-            { value: 'narrow_gate', label: 'Узкая калитка', hint: 'Вручную / мини' },
-            { value: 'standard', label: 'Стандартные ворота', hint: 'Техника пройдёт' },
-            { value: 'wide_road', label: 'Широкий проезд', hint: 'Можно трактор' },
-          ])}
-        </div>
-
-        <div class="param-block">
-          <label class="field-label">Срочность выезда</label>
-          ${renderPillGroup('urgency', state.urgency, [
-            { value: 'today', label: 'Сегодня', hint: 'Базовый тариф' },
-            { value: 'within_3h', label: 'За 3 часа', hint: '×1.3' },
-            { value: 'now_or_night', label: 'Срочно / ночь', hint: '×1.5' },
-          ])}
-        </div>
-
-        <label class="ice-check">
-          <input type="checkbox" id="p-snow-removal" ${state.snow_removal ? 'checked' : ''} />
-          <span><strong>Добавить вывоз снега с участка</strong> — расчёт объёма автоматически (450 ₽/м³, мин. 3 000 ₽)</span>
-        </label>
+        </details>
       `;
     } else if (svc === 'snow_road') {
+      const roadPresets = [
+        { len: 30, wid: 4, title: 'Короткий заезд', sub: '~30 × 4 м (120 м²)' },
+        { len: 60, wid: 4, title: 'Улица СНТ', sub: '~60 × 4 м (240 м²)' },
+        { len: 150, wid: 4, title: 'Длинный проезд', sub: '~150 × 4 м (600 м²)' },
+      ];
       html = `
-        <div class="form-grid-2">
-          <div>
-            <label class="field-label" for="p-length">Длина проезда (м)</label>
-            <input type="number" class="input mono" id="p-length" min="5" max="2000" step="5" value="${Number(state.length_m) || 60}" />
+        <div class="size-cards-grid cols-3">
+          ${roadPresets
+            .map(
+              (p) => `
+            <button type="button" class="size-card ${Number(state.length_m) === p.len ? 'active' : ''}" data-preset-road="${p.len}x${p.wid}">
+              <strong>${p.title}</strong>
+              <span>${p.sub}</span>
+            </button>
+          `
+            )
+            .join('')}
+        </div>
+
+        <details class="details-drawer">
+          <summary>
+            <span>Уточнить длину, ширину, глубину снега и вывоз</span>
+            <span class="details-badge" id="details-summary-badge">${esc(detailsSummaryText())}</span>
+          </summary>
+          <div class="details-body">
+            <div class="form-grid-2">
+              <div>
+                <label class="field-label" for="p-length">Длина (м)</label>
+                <input type="number" class="input mono" id="p-length" min="5" max="2000" step="5" value="${Number(state.length_m) || 60}" />
+              </div>
+              <div>
+                <label class="field-label" for="p-width">Ширина (м)</label>
+                <input type="number" class="input mono" id="p-width" min="2" max="15" step="0.5" value="${Number(state.width_m) || 4}" />
+              </div>
+            </div>
+            <div class="param-block">
+              <label class="field-label">Глубина снега</label>
+              ${renderPillGroup('depth_bucket', state.depth_bucket, [
+                { value: 'up_to_10', label: 'До 10 см', hint: '×1.0' },
+                { value: 'from_10_to_30', label: '10–30 см', hint: '×1.5' },
+                { value: 'over_30', label: 'Более 30 см', hint: '×2.0' },
+              ])}
+            </div>
+            <div class="param-block">
+              <label class="field-label">Срочность</label>
+              ${renderPillGroup('urgency', state.urgency, [
+                { value: 'today', label: 'Сегодня', hint: 'Базовый' },
+                { value: 'within_3h', label: 'За 3 часа', hint: '×1.3' },
+                { value: 'now_or_night', label: 'Срочно / ночь', hint: '×1.5' },
+              ])}
+            </div>
+            <label class="ice-check">
+              <input type="checkbox" id="p-snow-removal" ${state.snow_removal ? 'checked' : ''} />
+              <span><strong>Добавить вывоз снега</strong></span>
+            </label>
           </div>
-          <div>
-            <label class="field-label" for="p-width">Ширина проезда (м)</label>
-            <input type="number" class="input mono" id="p-width" min="2" max="15" step="0.5" value="${Number(state.width_m) || 4}" />
-          </div>
-        </div>
-
-        <div class="param-block">
-          <label class="field-label">Глубина снега</label>
-          ${renderPillGroup('depth_bucket', state.depth_bucket, [
-            { value: 'up_to_10', label: 'До 10 см', hint: '×1.0' },
-            { value: 'from_10_to_30', label: '10–30 см', hint: '×1.5' },
-            { value: 'over_30', label: 'Более 30 см', hint: '×2.0' },
-          ])}
-        </div>
-
-        <div class="param-block">
-          <label class="field-label">Условия проезда</label>
-          ${renderPillGroup('access_constraint', state.access_constraint, [
-            { value: 'narrow_gate', label: 'Стеснённый проезд', hint: 'Мини-техника' },
-            { value: 'standard', label: 'Стандартная улица СНТ', hint: 'Мини-погрузчик' },
-            { value: 'wide_road', label: 'Широкая дорога', hint: 'Трактор' },
-          ])}
-        </div>
-
-        <div class="param-block">
-          <label class="field-label">Срочность выезда</label>
-          ${renderPillGroup('urgency', state.urgency, [
-            { value: 'today', label: 'Сегодня', hint: 'Базовый тариф' },
-            { value: 'within_3h', label: 'За 3 часа', hint: '×1.3' },
-            { value: 'now_or_night', label: 'Срочно / ночь', hint: '×1.5' },
-          ])}
-        </div>
-
-        <label class="ice-check">
-          <input type="checkbox" id="p-snow-removal" ${state.snow_removal ? 'checked' : ''} />
-          <span><strong>Добавить вывоз снега</strong> (450 ₽/м³, мин. 3 000 ₽)</span>
-        </label>
+        </details>
       `;
     } else if (svc === 'car_rescue') {
       html = `
         <div class="param-block">
-          <label class="field-label">Тип автомобиля</label>
           ${renderPillGroup('vehicle_type', state.vehicle_type, [
-            { value: 'sedan', label: 'Легковой / седан', hint: 'Базовая цена' },
+            { value: 'sedan', label: 'Легковая', hint: 'Базовая цена' },
             { value: 'suv', label: 'Внедорожник', hint: '+500 ₽' },
-            { value: 'commercial', label: 'Фургон / коммерч.', hint: '+1 500 ₽' },
+            { value: 'commercial', label: 'Фургон / микроавтобус', hint: '+1 500 ₽' },
           ])}
         </div>
 
-        <div class="param-block">
-          <div class="param-row-head">
-            <label class="field-label" for="p-dist">Удалённость от Малаховки (км)</label>
-            <span class="mono" style="font-size:12px;color:var(--cryo)">до 5 км — бесплатно</span>
+        <details class="details-drawer">
+          <summary>
+            <span>Уточнить расстояние от Малаховки и срочность</span>
+            <span class="details-badge" id="details-summary-badge">${esc(detailsSummaryText())}</span>
+          </summary>
+          <div class="details-body">
+            <div class="param-block">
+              <div class="param-row-head">
+                <label class="field-label" for="p-dist">Расстояние от базы (км)</label>
+                <span class="mono" style="font-size:11.5px;color:var(--cryo)">до 5 км — бесплатно</span>
+              </div>
+              <div class="range-input-row">
+                <input type="range" class="ice-range" id="p-dist-range" min="1" max="30" step="1" value="${Math.min(30, Number(state.distance_km) || 3)}" />
+                <input type="number" class="input mono" id="p-dist" min="0" max="100" step="1" value="${Number(state.distance_km) || 3}" style="width:94px" />
+              </div>
+            </div>
+            <label class="ice-check">
+              <input type="checkbox" id="p-urgent-rescue" ${state.is_urgent_rescue ? 'checked' : ''} />
+              <span><strong>Срочный выезд ближайшего экипажа</strong> (+500 ₽)</span>
+            </label>
           </div>
-          <div class="range-input-row">
-            <input type="range" id="p-dist-range" min="1" max="30" step="1" value="${Math.min(30, Number(state.distance_km) || 3)}" />
-            <input type="number" class="input mono" id="p-dist" min="0" max="100" step="1" value="${Number(state.distance_km) || 3}" style="width:100px" />
-          </div>
-        </div>
-
-        <label class="ice-check">
-          <input type="checkbox" id="p-urgent-rescue" ${state.is_urgent_rescue ? 'checked' : ''} />
-          <span><strong>Срочный приоритетный выезд</strong> (+500 ₽, ближайший свободный экипаж)</span>
-        </label>
+        </details>
       `;
     } else if (svc === 'yard_help' || svc === 'movers') {
+      const packs = [
+        { w: 1, h: 2, title: '1 мастер · 2 часа', sub: 'Мелкие задачи' },
+        { w: 2, h: 2, title: '2 мастера · 2 часа', sub: 'Самый частый вариант' },
+        { w: 2, h: 4, title: '2 мастера · 4 часа', sub: 'Большой объём' },
+      ];
       html = `
-        <div class="form-grid-2">
-          <div>
-            <label class="field-label" for="p-workers">Количество исполнителей</label>
-            <input type="number" class="input mono" id="p-workers" min="1" max="10" value="${Number(state.workers_count) || 2}" />
-          </div>
-          <div>
-            <label class="field-label" for="p-hours">Время работы (часов, мин. 2)</label>
-            <input type="number" class="input mono" id="p-hours" min="2" max="24" value="${Math.max(2, Number(state.hours) || 2)}" />
-          </div>
+        <div class="size-cards-grid cols-3">
+          ${packs
+            .map(
+              (p) => `
+            <button type="button" class="size-card ${Number(state.workers_count) === p.w && Number(state.hours) === p.h ? 'active' : ''}" data-preset-pack="${p.w}x${p.h}">
+              <strong>${p.title}</strong>
+              <span>${p.sub}</span>
+            </button>
+          `
+            )
+            .join('')}
         </div>
 
-        ${
-          svc === 'movers'
-            ? `
-          <div class="param-block">
-            <label class="field-label" for="p-floors">Этажей без лифта (150 ₽ / этаж / грузчик)</label>
-            <input type="number" class="input mono" id="p-floors" min="0" max="25" value="${Number(state.floors_without_lift) || 0}" style="max-width:160px" />
-          </div>
-        `
-            : ''
-        }
-
-        <label class="ice-check">
-          <input type="checkbox" id="p-equip" ${state.needs_equipment ? 'checked' : ''} />
-          <span><strong>Нужен наш инструмент / спец. инвентарь</strong> (+1 500 ₽)</span>
-        </label>
-      `;
-    } else if (svc === 'roof_cleaning') {
-      html = `
-        <div class="param-block">
-          <div class="param-row-head">
-            <label class="field-label" for="p-area">Ориентировочная площадь крыши (м²)</label>
-            <div class="preset-chips">
-              ${[60, 100, 160, 250]
-                .map(
-                  (v) =>
-                    `<button type="button" class="preset-chip ${Number(state.area_m2) === v ? 'active' : ''}" data-preset-area="${v}">${v} м²</button>`
-                )
-                .join('')}
+        <details class="details-drawer">
+          <summary>
+            <span>Указать точное число мастеров, часов или этажей</span>
+            <span class="details-badge" id="details-summary-badge">${esc(detailsSummaryText())}</span>
+          </summary>
+          <div class="details-body">
+            <div class="form-grid-2">
+              <div>
+                <label class="field-label" for="p-workers">Исполнителей</label>
+                <input type="number" class="input mono" id="p-workers" min="1" max="10" value="${Number(state.workers_count) || 2}" />
+              </div>
+              <div>
+                <label class="field-label" for="p-hours">Часов (мин. 2)</label>
+                <input type="number" class="input mono" id="p-hours" min="2" max="24" value="${Math.max(2, Number(state.hours) || 2)}" />
+              </div>
             </div>
+            ${
+              svc === 'movers'
+                ? `
+              <div class="param-block">
+                <label class="field-label" for="p-floors">Этажей без лифта</label>
+                <input type="number" class="input mono" id="p-floors" min="0" max="25" value="${Number(state.floors_without_lift) || 0}" style="max-width:140px" />
+              </div>`
+                : ''
+            }
+            <label class="ice-check">
+              <input type="checkbox" id="p-equip" ${state.needs_equipment ? 'checked' : ''} />
+              <span><strong>Нужен наш инструмент / инвентарь</strong> (+1 500 ₽)</span>
+            </label>
           </div>
-          <div class="range-input-row">
-            <input type="range" id="p-area-range" min="20" max="600" step="10" value="${Math.min(600, Number(state.area_m2) || 100)}" />
-            <input type="number" class="input mono" id="p-area" min="10" max="5000" step="5" value="${Number(state.area_m2) || 100}" style="width:110px" />
-          </div>
-          <div style="font-size:12px;color:var(--text-muted);margin-top:6px">
-            На крышу выезжают только сертифицированные исполнители со страховкой. Минимальный выезд — 5 000 ₽.
-          </div>
-        </div>
+        </details>
       `;
-    } else if (svc === 'reagents') {
+    } else if (svc === 'roof_cleaning' || svc === 'reagents') {
+      const presets =
+        svc === 'roof_cleaning'
+          ? [
+              { val: 60, title: 'Небольшая крыша', sub: '~60 м² · домик / гараж' },
+              { val: 120, title: 'Коттедж', sub: '~120 м² · со страховкой' },
+              { val: 200, title: 'Большая кровля', sub: '~200 м² · бригада' },
+            ]
+          : [
+              { val: 50, title: 'Дорожки и ступени', sub: '~50 м²' },
+              { val: 100, title: 'Двор и парковка', sub: '~100 м²' },
+              { val: 250, title: 'Большая площадка', sub: '~250 м²' },
+            ];
       html = `
-        <div class="param-block">
-          <div class="param-row-head">
-            <label class="field-label" for="p-area">Площадь обработки реагентами (м²)</label>
-            <div class="preset-chips">
-              ${[50, 100, 200, 400]
-                .map(
-                  (v) =>
-                    `<button type="button" class="preset-chip ${Number(state.area_m2) === v ? 'active' : ''}" data-preset-area="${v}">${v} м²</button>`
-                )
-                .join('')}
-            </div>
-          </div>
-          <div class="range-input-row">
-            <input type="range" id="p-area-range" min="10" max="1000" step="10" value="${Math.min(1000, Number(state.area_m2) || 100)}" />
-            <input type="number" class="input mono" id="p-area" min="10" max="10000" step="5" value="${Number(state.area_m2) || 100}" style="width:110px" />
-          </div>
+        <div class="size-cards-grid cols-3">
+          ${presets
+            .map(
+              (p) => `
+            <button type="button" class="size-card ${Number(state.area_m2) === p.val ? 'active' : ''}" data-preset-area="${p.val}">
+              <strong>${p.title}</strong>
+              <span>${p.sub}</span>
+            </button>
+          `
+            )
+            .join('')}
         </div>
 
-        <label class="ice-check">
-          <input type="checkbox" id="p-addon" ${state.as_addon ? 'checked' : ''} />
-          <span><strong>Вместе с уборкой снега</strong> (выезд 0 ₽, оплачивается только обработка)</span>
-        </label>
+        <details class="details-drawer">
+          <summary>
+            <span>Указать точную площадь${svc === 'reagents' ? ' или доп. к уборке' : ''}</span>
+            <span class="details-badge" id="details-summary-badge">${esc(detailsSummaryText())}</span>
+          </summary>
+          <div class="details-body">
+            <div class="param-block">
+              <label class="field-label" for="p-area">Точная площадь (м²)</label>
+              <div class="range-input-row">
+                <input type="range" class="ice-range" id="p-area-range" min="10" max="600" step="10" value="${Math.min(600, Number(state.area_m2) || 100)}" />
+                <input type="number" class="input mono" id="p-area" min="10" max="5000" step="5" value="${Number(state.area_m2) || 100}" style="width:104px" />
+              </div>
+            </div>
+            ${
+              svc === 'reagents'
+                ? `
+              <label class="ice-check">
+                <input type="checkbox" id="p-addon" ${state.as_addon ? 'checked' : ''} />
+                <span><strong>Вместе с уборкой снега</strong> (выезд 0 ₽)</span>
+              </label>`
+                : ''
+            }
+          </div>
+        </details>
       `;
     }
 
     box.innerHTML = html;
     bindDynamicEvents(box);
+  }
+
+  function refreshDetailsBadge() {
+    const badge = document.getElementById('details-summary-badge');
+    if (badge) badge.textContent = detailsSummaryText();
   }
 
   function bindDynamicEvents(box) {
@@ -453,6 +580,7 @@
           state[key] = btn.getAttribute('data-val');
           group.querySelectorAll('[data-val]').forEach((b) => b.classList.remove('active'));
           btn.classList.add('active');
+          refreshDetailsBadge();
           scheduleQuote();
         });
       });
@@ -468,6 +596,38 @@
         if (rng) rng.value = String(Math.min(Number(rng.max), val));
         box.querySelectorAll('[data-preset-area]').forEach((c) => c.classList.remove('active'));
         btn.classList.add('active');
+        refreshDetailsBadge();
+        scheduleQuote();
+      });
+    });
+
+    box.querySelectorAll('[data-preset-road]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const [l, w] = btn.getAttribute('data-preset-road').split('x').map(Number);
+        state.length_m = l;
+        state.width_m = w;
+        const lEl = document.getElementById('p-length');
+        const wEl = document.getElementById('p-width');
+        if (lEl) lEl.value = String(l);
+        if (wEl) wEl.value = String(w);
+        box.querySelectorAll('[data-preset-road]').forEach((c) => c.classList.remove('active'));
+        btn.classList.add('active');
+        scheduleQuote();
+      });
+    });
+
+    box.querySelectorAll('[data-preset-pack]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const [w, h] = btn.getAttribute('data-preset-pack').split('x').map(Number);
+        state.workers_count = w;
+        state.hours = h;
+        const wEl = document.getElementById('p-workers');
+        const hEl = document.getElementById('p-hours');
+        if (wEl) wEl.value = String(w);
+        if (hEl) hEl.value = String(h);
+        box.querySelectorAll('[data-preset-pack]').forEach((c) => c.classList.remove('active'));
+        btn.classList.add('active');
+        refreshDetailsBadge();
         scheduleQuote();
       });
     });
@@ -478,6 +638,7 @@
       areaNum.addEventListener('input', () => {
         state.area_m2 = Number(areaNum.value) || 10;
         if (areaRange) areaRange.value = String(Math.min(Number(areaRange.max), state.area_m2));
+        refreshDetailsBadge();
         scheduleQuote();
       });
     }
@@ -485,6 +646,7 @@
       areaRange.addEventListener('input', () => {
         state.area_m2 = Number(areaRange.value) || 10;
         if (areaNum) areaNum.value = String(state.area_m2);
+        refreshDetailsBadge();
         scheduleQuote();
       });
     }
@@ -494,6 +656,7 @@
       if (!el) return;
       el.addEventListener('input', () => {
         state[key] = Math.max(minVal, Number(el.value) || minVal);
+        refreshDetailsBadge();
         scheduleQuote();
       });
     };
@@ -509,6 +672,7 @@
       distNum.addEventListener('input', () => {
         state.distance_km = Math.max(0, Number(distNum.value) || 0);
         if (distRange) distRange.value = String(Math.min(30, state.distance_km));
+        refreshDetailsBadge();
         scheduleQuote();
       });
     }
@@ -516,6 +680,7 @@
       distRange.addEventListener('input', () => {
         state.distance_km = Number(distRange.value) || 0;
         if (distNum) distNum.value = String(state.distance_km);
+        refreshDetailsBadge();
         scheduleQuote();
       });
     }
@@ -525,6 +690,7 @@
       if (!el) return;
       el.addEventListener('change', () => {
         state[key] = Boolean(el.checked);
+        refreshDetailsBadge();
         scheduleQuote();
       });
     };
@@ -536,12 +702,12 @@
 
   function scheduleQuote() {
     if (quoteTimer) clearTimeout(quoteTimer);
-    quoteTimer = setTimeout(fetchQuote, 140);
+    quoteTimer = setTimeout(fetchQuote, 130);
   }
 
   async function fetchQuote() {
     const statusPill = document.getElementById('quote-status-pill');
-    if (statusPill) statusPill.textContent = 'РАСЧЁТ…';
+    if (statusPill) statusPill.textContent = 'СЧИТАЕМ…';
     try {
       const resp = await fetch('/api/v1/public/orders/quote', {
         method: 'POST',
@@ -550,9 +716,8 @@
       });
       const data = await resp.json();
       if (!resp.ok) {
-        const msg = data?.error?.message || data?.detail || 'Проверьте параметры расчёта';
-        if (statusPill) statusPill.textContent = 'ПРОВЕРЬТЕ ПАРАМЕТРЫ';
-        showFormError(msg);
+        if (statusPill) statusPill.textContent = 'ПРОВЕРЬТЕ ПОЛЯ';
+        showFormError(data?.error?.message || data?.detail || 'Проверьте параметры расчёта');
         return;
       }
       showFormError('');
@@ -569,7 +734,7 @@
       if (el) el.textContent = val;
     };
 
-    set('quote-status-pill', q.is_night ? 'НОЧНОЙ ТАРИФ МСК' : 'ТОЧНЫЙ РАСЧЁТ');
+    set('quote-status-pill', q.is_night ? 'НОЧНОЙ ТАРИФ МСК' : 'ЦЕНА ДО ВЫЕЗДА');
     set('q-service-name', q.service_label);
     set('q-zone-name', q.zone_name);
 
@@ -602,14 +767,13 @@
 
     const submitBtn = document.getElementById('order-submit-btn');
     if (submitBtn) {
-      submitBtn.textContent = `Оформить заказ · ${fmtRub(q.estimated_total)}`;
+      submitBtn.textContent = `Заказать уборку · ${fmtRub(q.estimated_total)}`;
     }
   }
 
   function selectService(code, shouldScroll) {
     if (!code) return;
     state.service = code;
-    // Возвращаем форму заказа, если до этого был показан экран подтверждения
     const formWrap = document.getElementById('order-form-panel');
     const doneWrap = document.getElementById('order-success-panel');
     if (formWrap) formWrap.hidden = false;
@@ -620,8 +784,7 @@
     scheduleQuote();
 
     if (shouldScroll) {
-      const target = document.getElementById('order');
-      if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      document.getElementById('order')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
   }
 
@@ -630,21 +793,16 @@
     showFormError('');
 
     const address = (document.getElementById('order-address')?.value || '').trim();
-    const name = (document.getElementById('order-name')?.value || '').trim();
     const phone = (document.getElementById('order-phone')?.value || '').trim();
+    const name = (document.getElementById('order-name')?.value || '').trim();
     const email = (document.getElementById('order-email')?.value || '').trim();
     const comment = (document.getElementById('order-comment')?.value || '').trim();
     const consentPdn = Boolean(document.getElementById('order-consent-pdn')?.checked);
     const consentOffer = Boolean(document.getElementById('order-consent-offer')?.checked);
 
     if (address.length < 5) {
-      showFormError('Укажите точный адрес: улицу, номер дома или СНТ.');
+      showFormError('Укажите адрес: улицу, дом или СНТ.');
       document.getElementById('order-address')?.focus();
-      return;
-    }
-    if (name.length < 2) {
-      showFormError('Укажите ваше имя.');
-      document.getElementById('order-name')?.focus();
       return;
     }
     if (phone.replace(/\D/g, '').length < 10) {
@@ -653,7 +811,7 @@
       return;
     }
     if (!consentPdn || !consentOffer) {
-      showFormError('Чтобы отправить заказ, отметьте согласие на обработку ПДн и принятие публичной оферты.');
+      showFormError('Отметьте две галочки согласия ниже — этого требует закон РФ.');
       return;
     }
 
@@ -661,7 +819,7 @@
     const prevText = btn ? btn.textContent : '';
     if (btn) {
       btn.disabled = true;
-      btn.textContent = 'Оформляем заявку…';
+      btn.textContent = 'Отправляем заявку…';
     }
 
     try {
@@ -682,11 +840,11 @@
       });
       const data = await resp.json();
       if (!resp.ok) {
-        const msg =
+        showFormError(
           data?.error?.message ||
-          (typeof data?.detail === 'string' ? data.detail : null) ||
-          'Не удалось оформить заказ. Проверьте поля формы.';
-        showFormError(msg);
+            (typeof data?.detail === 'string' ? data.detail : null) ||
+            'Не удалось оформить заявку. Проверьте поля формы.'
+        );
         return;
       }
 
@@ -697,7 +855,7 @@
     } finally {
       if (btn) {
         btn.disabled = false;
-        btn.textContent = prevText || 'Оформить заказ';
+        btn.textContent = prevText || 'Заказать уборку';
       }
     }
   }
@@ -737,9 +895,9 @@
       nextStepHtml = `
         <div class="success-action-box">
           <div style="font-size:13.5px;color:var(--text-frost);line-height:1.6;margin-bottom:14px">
-            Заявка <strong>#${o.public_number}</strong> уже поступила диспетчеру.
-            Мы перезвоним вам в течение <strong>10 минут</strong>, подтвердим время приезда бригады
-            и направим ссылку на оплату аванса по СБП.
+            Заявка <strong>#${o.public_number}</strong> уже у диспетчера.
+            Перезвоним вам в течение <strong>10 минут</strong>, подтвердим время приезда бригады
+            и направим ссылку СБП на оплату аванса.
           </div>
           <a class="btn btn-primary" href="tel:+${esc(phoneDigits)}">
             Позвонить диспетчеру ${esc(o.dispatcher_phone)}
@@ -749,7 +907,7 @@
     }
 
     doneWrap.innerHTML = `
-      <div class="section-kicker" style="margin-bottom:10px">ЗАЯВКА ОФОРМЛЕНА</div>
+      <div class="section-kicker" style="margin-bottom:10px">ЗАЯВКА ПРИНЯТА</div>
       <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px">
         <h3 style="margin:0;font-size:24px">Заказ <span class="mono" style="color:var(--cryo)">#${o.public_number}</span></h3>
         <span class="pill pill-green" id="created-order-status">${esc(o.status_label)}</span>
@@ -849,18 +1007,15 @@
   }
 
   async function initStorefront() {
-    // Быстрые кнопки выбора в hero
     document.querySelectorAll('[data-quick-svc]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        selectService(btn.getAttribute('data-quick-svc'), true);
-      });
+      btn.addEventListener('click', () => selectService(btn.getAttribute('data-quick-svc'), true));
     });
 
-    const zoneSelect = document.getElementById('order-zone');
-    if (zoneSelect) {
-      zoneSelect.addEventListener('change', () => {
-        state.zone_code = zoneSelect.value;
-        scheduleQuote();
+    // Умная подсказка +7 в поле телефона
+    const phoneEl = document.getElementById('order-phone');
+    if (phoneEl) {
+      phoneEl.addEventListener('focus', () => {
+        if (!phoneEl.value.trim()) phoneEl.value = '+7 ';
       });
     }
 
@@ -881,22 +1036,19 @@
       if (r.ok) {
         const cat = await r.json();
         state.catalog = cat;
-        if (cat.zones && cat.zones.length) {
-          state.zone_code = cat.zones[0].code;
-        }
-        // Показываем кнопку симулятора только в локальном dev-режиме
+        if (cat.zones && cat.zones.length) state.zone_code = cat.zones[0].code;
         if (cat.simulator_enabled) {
           document.querySelectorAll('[data-sim-only]').forEach((el) => {
             el.style.display = el.classList.contains('btn') ? 'inline-flex' : 'inline';
           });
         }
-        // Если задана боевая ссылка на MAX-бот, показываем её
         if (cat.max_bot_url) {
           document.querySelectorAll('[data-max-bot-link]').forEach((el) => {
             el.href = cat.max_bot_url;
             el.style.display = 'inline-flex';
           });
         }
+        syncHeroPrices();
         renderZones();
         renderServiceTabs();
         renderCatalogCards();

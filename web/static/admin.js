@@ -455,7 +455,12 @@ async function renderTariffs(root) {
 
     <div class="split-2">
       <div class="ice-panel">
-        <div class="field-label" style="margin-bottom:8px">КОНФИГУРАЦИЯ ТАРИФА (JSON)</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+          <div class="field-label" style="margin:0">КОНФИГУРАЦИЯ ТАРИФА (JSON)</div>
+          <button type="button" class="btn btn-sm" onclick="applyMarket2026Tariff()" title="Подставить рыночные ставки Московской области 2026 для предпросмотра">
+            ❄ Подставить прайс МО 2026
+          </button>
+        </div>
         <textarea id="tariff-json" rows="21" class="mono" style="font-size:11.5px;line-height:1.5">${esc(JSON.stringify(cur.config_json, null, 2))}</textarea>
         <div style="display:flex;gap:8px;margin-top:12px">
           <input class="input" id="tariff-comment" placeholder="Комментарий к версии v${cur.version + 1}..." />
@@ -524,6 +529,44 @@ async function renderTariffs(root) {
     </div>
   `;
   runPreview();
+}
+
+function applyMarket2026Tariff() {
+  try {
+    const area = document.getElementById('tariff-json');
+    const cfg = JSON.parse(area.value);
+    cfg.min_order_total_rub = 2000;
+    if (cfg.snow && cfg.snow.methods) {
+      if (cfg.snow.methods.manual) {
+        cfg.snow.methods.manual.rate_per_m2 = 40;
+        cfg.snow.methods.manual.min_work_price = 2500;
+      }
+      if (cfg.snow.methods.snowblower_or_miniloader) {
+        cfg.snow.methods.snowblower_or_miniloader.rate_per_m2 = 30;
+        cfg.snow.methods.snowblower_or_miniloader.min_work_price = 3000;
+      }
+      if (cfg.snow.methods.tractor) {
+        cfg.snow.methods.tractor.rate_per_m2 = 20;
+        cfg.snow.methods.tractor.min_work_price = 5000;
+      }
+    }
+    if (cfg.snow && cfg.snow.snow_removal) {
+      cfg.snow.snow_removal.rate_per_m3 = 550;
+      cfg.snow.snow_removal.min_price = 6000;
+    }
+    if (cfg.roof_and_reagents) {
+      cfg.roof_and_reagents.reagents_min_price = 1000;
+    }
+    area.value = JSON.stringify(cfg, null, 2);
+    const commentEl = document.getElementById('tariff-comment');
+    if (commentEl && !commentEl.value.trim()) {
+      commentEl.value = 'Актуализация прайса МО 2026 (Люберцы / Малаховка)';
+    }
+    runPreview();
+    toast('Подставлены рыночные ставки МО 2026 — проверьте смету справа и нажмите «Сохранить»');
+  } catch (e) {
+    toast('Ошибка JSON: ' + e.message);
+  }
 }
 
 async function saveTariff() {

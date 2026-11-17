@@ -227,7 +227,7 @@ class PublicQuoteRequest(BaseModel):
 
 class PublicCreateOrderRequest(PublicQuoteRequest):
     address_text: str = Field(..., min_length=5, max_length=400)
-    client_name: str = Field(..., min_length=2, max_length=120)
+    client_name: str = Field(default="", max_length=120)
     client_phone: str = Field(..., min_length=10, max_length=32)
     client_email: str | None = Field(default=None, max_length=255)
     client_comment: str | None = Field(default=None, max_length=1000)
@@ -438,13 +438,11 @@ async def create_public_order(
         )
 
     formatted_phone, phone_digits = normalize_ru_phone(body.client_phone)
-    clean_name = " ".join(body.client_name.strip().split())
+    clean_name = " ".join(body.client_name.strip().split()) or "Клиент"
     clean_address = " ".join(body.address_text.strip().split())
     clean_email = body.client_email.strip().lower() if body.client_email and body.client_email.strip() else None
     clean_comment = body.client_comment.strip() if body.client_comment and body.client_comment.strip() else None
 
-    if len(clean_name) < 2:
-        raise ValidationAppError("Укажите ваше имя (минимум 2 символа)")
     if len(clean_address) < 5:
         raise ValidationAppError("Укажите подробный адрес (улица, дом или СНТ)")
     if clean_email and ("@" not in clean_email or "." not in clean_email.split("@")[-1]):
