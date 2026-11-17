@@ -5,7 +5,7 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, ValidationInfo, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -84,14 +84,18 @@ class Settings(BaseSettings):
     # Юридические реквизиты оператора (152-ФЗ, 38-ФЗ, ЗоЗПП, 54-ФЗ)
     brand_name: str = "ЧистоДвор"
     legal_operator_name: str = "ИП Холматов Леонид Икрамович"
-    legal_inn: str = ""
-    legal_ogrnip: str = ""
-    legal_address: str = "Российская Федерация, Московская область"
-    legal_email: str = "privacy@chistodvor.ru"
-    legal_phone: str = ""
+    legal_inn: str = "231521684300"
+    legal_ogrnip: str = "321344300084915"
+    legal_registration_date: str = "30.09.2021"
+    legal_okpo: str = "2010823753"
+    legal_oktmo: str = "18701000001"
+    legal_tax_regime: str = "УСН"
+    legal_address: str = "Российская Федерация, г. Волгоград (зона оказания услуг: Москва и МО)"
+    legal_email: str = "holmatovleonid25@gmail.com"
+    legal_phone: str = "+7 (977) 924-02-93"
     legal_rkn_reg_no: str = ""
     legal_datacenter_info: str = (
-        "ЦОД на территории Российской Федерации (ООО «Таймвэб.Клауд», РФ)"
+        "ЦОД на территории Российской Федерации (ООО «Таймвэб.Клауд», г. Новосибирск, РФ)"
     )
     legal_doc_version: str = "2.0"
     legal_doc_updated_date: str = "17.11.2026"
@@ -105,6 +109,30 @@ class Settings(BaseSettings):
     def _empty_str_to_none(cls, value: object) -> object:
         if isinstance(value, str) and value.strip() == "":
             return None
+        return value
+
+    @field_validator(
+        "brand_name",
+        "legal_operator_name",
+        "legal_inn",
+        "legal_ogrnip",
+        "legal_registration_date",
+        "legal_okpo",
+        "legal_oktmo",
+        "legal_tax_regime",
+        "legal_address",
+        "legal_email",
+        "legal_phone",
+        "legal_datacenter_info",
+        mode="before",
+    )
+    @classmethod
+    def _empty_legal_str_uses_default(cls, value: object, info: ValidationInfo) -> object:
+        if isinstance(value, str) and value.strip() == "":
+            field_name = info.field_name or ""
+            field = cls.model_fields.get(field_name)
+            if field is not None and isinstance(field.default, str):
+                return field.default
         return value
 
     @model_validator(mode="after")

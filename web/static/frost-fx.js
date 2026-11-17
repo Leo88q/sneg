@@ -302,6 +302,7 @@
         const parts = [m.operator_name];
         if (m.inn) parts.push(`ИНН ${m.inn}`);
         if (m.ogrnip) parts.push(`ОГРНИП ${m.ogrnip}`);
+        if (m.phone) parts.push(m.phone);
         if (m.rkn_reg_no) parts.push(`РКН № ${m.rkn_reg_no}`);
         parts.push('18+');
         footerOp.textContent = parts.join(' · ');
