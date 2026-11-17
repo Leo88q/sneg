@@ -36,6 +36,7 @@ from src.core.enums import (
     SERVICE_LABELS,
     STATUS_LABELS,
     AccessConstraint,
+    AdminRole,
     ChatPurpose,
     ConsentType,
     ContactMode,
@@ -50,6 +51,7 @@ from src.core.enums import (
     UserRole,
 )
 from src.core.exceptions import AppError
+from src.core.security import verify_password
 from src.domain.geo.service import GeoZoneCandidate, resolve_geo_zone_by_coords
 from src.domain.pricing.calculator import (
     ZERO,
@@ -58,6 +60,7 @@ from src.domain.pricing.calculator import (
     to_decimal,
 )
 from src.infra.db.models import (
+    AdminAccount,
     BotChat,
     DataSubjectRequest,
     Dispute,
@@ -246,7 +249,7 @@ class BotRouter:
                 MessageTarget(user_id=user.max_user_id),
                 OutgoingMessage(
                     text=(
-                        "❄️ **Добро пожаловать в «Снег-Диспетчер»!**\n"
+                        f"❄️ **Добро пожаловать в «{self.settings.brand_name}»!**\n"
                         "Уборка снега, расчистка дорог, срочная помощь авто в сугробе и бытовые услуги "
                         "в Малаховке, Томилино, Красково, Быково и Лыткарино.\n\n"
                         "Для продолжения ознакомьтесь с публичной офертой и политикой обработки ПДн:"
@@ -270,6 +273,97 @@ class BotRouter:
             OutgoingMessage(text=greeting, keyboard=main_menu_keyboard(user.role)),
         )
 
+    async def _handle_bind_alerts_chat(
+        self,
+        *,
+        raw_sender: dict[str, Any],
+        chat_id: int,
+        chat_type: str,
+        password_arg: str,
+    ) -> None:
+        """Привязывает личный диалог или группу диспетчера для мгновенных уведомлений о новых заявках."""
+        async with self.session_factory() as session:
+            user = await self._get_or_create_user(session, raw_sender, chat_id if chat_type == "dialog" else None)
+            is_privileged = user.role in (
+                UserRole.OWNER.value,
+                UserRole.ADMIN.value,
+                UserRole.FOREMAN.value,
+            )
+
+            password_ok = False
+            if password_arg:
+                admins = (
+                    await session.execute(
+                        select(AdminAccount).where(
+                            AdminAccount.is_active.is_(True),
+                            AdminAccount.role.in_([AdminRole.OWNER.value, AdminRole.ADMIN.value]),
+                        )
+                    )
+                ).scalars().all()
+                for acc in admins:
+                    if verify_password(password_arg, acc.password_hash):
+                        password_ok = True
+                        break
+
+            if not is_privileged and not password_ok:
+                await session.commit()
+                target = (
+                    MessageTarget(chat_id=chat_id)
+                    if chat_type == "chat"
+                    else MessageTarget(user_id=user.max_user_id)
+                )
+                await self.messenger.send_message(
+                    target,
+                    OutgoingMessage(
+                        text=(
+                            "🔐 Для привязки уведомлений укажите пароль владельца от админки:\n"
+                            "`/bind_alerts_chat ВАШ_ПАРОЛЬ_АДМИНКИ`"
+                        )
+                    ),
+                )
+                return
+
+            if password_ok and user.role != UserRole.OWNER.value:
+                user.role = UserRole.OWNER.value
+
+            chat = await session.get(BotChat, chat_id)
+            title = (
+                f"Личные уведомления владельца ({user.display_name})"
+                if chat_type == "dialog"
+                else "Чат диспетчера (уведомления о заявках)"
+            )
+            if chat is None:
+                chat = BotChat(
+                    chat_id=chat_id,
+                    title=title,
+                    chat_purpose=ChatPurpose.FOREMAN_ALERTS.value,
+                    is_active=True,
+                    bot_is_admin=True,
+                )
+                session.add(chat)
+            else:
+                chat.chat_purpose = ChatPurpose.FOREMAN_ALERTS.value
+                chat.is_active = True
+                if not chat.title:
+                    chat.title = title
+            await session.commit()
+
+        target = (
+            MessageTarget(chat_id=chat_id)
+            if chat_type == "chat"
+            else MessageTarget(user_id=user.max_user_id)
+        )
+        await self.messenger.send_message(
+            target,
+            OutgoingMessage(
+                text=(
+                    "✅ **Этот чат привязан как диспетчерская (уведомления о заявках)!**\n\n"
+                    "Теперь все новые заявки с сайта **chistodvor.ru** и из **MAX-бота** будут мгновенно приходить сюда "
+                    "с номером телефона клиента, адресом, расчётом прибыли и кнопкой **«🚀 Отправить в чат рабочих»**."
+                )
+            ),
+        )
+
     async def _on_message_created(
         self,
         update: dict[str, Any],
@@ -290,7 +384,7 @@ class BotRouter:
         text = str(body.get("text") or "").strip()
         attachments = list(body.get("attachments") or [])
 
-        # Групповой чат: поддерживаем команду привязки /bind_dispatch_chat
+        # Групповой чат: поддерживаем привязку чата рабочих (/bind_dispatch_chat) и чата заявок (/bind_alerts_chat)
         if chat_type == "chat" and chat_id is not None:
             if text.startswith("/bind_dispatch_chat"):
                 async with self.session_factory() as session:
@@ -311,8 +405,20 @@ class BotRouter:
                 await self.messenger.send_message(
                     MessageTarget(chat_id=int(chat_id)),
                     OutgoingMessage(
-                        text="✅ Этот чат привязан как **основная биржа заказов бригады**."
+                        text=(
+                            "✅ Этот чат привязан как **основная биржа заказов бригады (для рабочих)**.\n"
+                            "Все оплаченные и подтверждённые заявки будут появляться здесь с кнопкой **«✅ Взять заказ»**."
+                        )
                     ),
+                )
+            elif text.startswith("/bind_alerts_chat") or text.startswith("/bind_owner"):
+                parts_cmd = text.split(maxsplit=1)
+                pwd_arg = parts_cmd[1].strip() if len(parts_cmd) > 1 else ""
+                await self._handle_bind_alerts_chat(
+                    raw_sender=sender,
+                    chat_id=int(chat_id),
+                    chat_type="chat",
+                    password_arg=pwd_arg,
                 )
             return
 
@@ -342,6 +448,18 @@ class BotRouter:
                         )
                         return
             await session.commit()
+
+        if text.startswith("/bind_alerts_chat") or text.startswith("/bind_owner"):
+            parts_cmd = text.split(maxsplit=1)
+            pwd_arg = parts_cmd[1].strip() if len(parts_cmd) > 1 else ""
+            target_cid = int(chat_id) if chat_id is not None else int(user.max_chat_id or user.max_user_id)
+            await self._handle_bind_alerts_chat(
+                raw_sender=sender,
+                chat_id=target_cid,
+                chat_type="dialog",
+                password_arg=pwd_arg,
+            )
+            return
 
         if text in ("/start", "/menu", "Меню"):
             await self._on_bot_started({"user": sender, "chat_id": chat_id, "payload": ""})
@@ -523,7 +641,7 @@ class BotRouter:
                         MessageTarget(user_id=user.max_user_id),
                         OutgoingMessage(
                             text=(
-                                "❓ **Как работает «Снег-Диспетчер»:**\n"
+                                f"❓ **Как работает «{self.settings.brand_name}»:**\n"
                                 "1. Выбираете услугу и параметры — получаете ориентировочную цену.\n"
                                 "2. Оплачиваете аванс 30–50% по СБП — заказ уходит в бригаду.\n"
                                 "3. Исполнитель присылает фото «ДО» и «ПОСЛЕ» работы.\n"
@@ -542,6 +660,67 @@ class BotRouter:
                                 ]
                             ),
                         ),
+                    )
+                return
+
+            if ns == "disp":
+                if user.role not in (
+                    UserRole.OWNER.value,
+                    UserRole.ADMIN.value,
+                    UserRole.FOREMAN.value,
+                ):
+                    await self.messenger.answer_callback(
+                        cb_id,
+                        notification="Только для владельца/диспетчера",
+                        target_chat_id=chat_id,
+                    )
+                    return
+                order_id = uuid.UUID(parts[2])
+                if action == "publish":
+                    order = await self.orchestrator.publish_order_to_dispatch(
+                        order_id=order_id,
+                        actor_label=f"MAX ({user.display_name})",
+                        actor_user_id=user.id,
+                    )
+                    await self.messenger.answer_callback(
+                        cb_id,
+                        notification=f"Заявка #{order.public_number} отправлена рабочим!",
+                        target_chat_id=chat_id,
+                    )
+                    target = (
+                        MessageTarget(chat_id=int(chat_id))
+                        if chat_id is not None
+                        else MessageTarget(user_id=user.max_user_id)
+                    )
+                    await self.messenger.send_message(
+                        target,
+                        OutgoingMessage(
+                            text=(
+                                f"🚀 **Заявка #{order.public_number} отправлена в чат бригады!**\n"
+                                "Рабочие уже видят карточку с кнопкой «✅ Взять заказ»."
+                            )
+                        ),
+                    )
+                elif action == "cancel":
+                    order = await self.orchestrator.cancel_order(
+                        order_id=order_id,
+                        reason=f"Отменено диспетчером {user.display_name} в MAX",
+                        by_service=True,
+                        actor_user_id=user.id,
+                    )
+                    await self.messenger.answer_callback(
+                        cb_id,
+                        notification=f"Заявка #{order.public_number} отменена",
+                        target_chat_id=chat_id,
+                    )
+                    target = (
+                        MessageTarget(chat_id=int(chat_id))
+                        if chat_id is not None
+                        else MessageTarget(user_id=user.max_user_id)
+                    )
+                    await self.messenger.send_message(
+                        target,
+                        OutgoingMessage(text=f"❌ Заявка **#{order.public_number}** отменена диспетчером."),
                     )
                 return
 
