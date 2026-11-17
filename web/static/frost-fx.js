@@ -230,9 +230,97 @@
     }
   });
 
+  // -------------------------------------------------------------------------
+  // Cookie-баннер (п. 4, 5, 9: без тёмных паттернов, равнозначные кнопки)
+  // -------------------------------------------------------------------------
+  const COOKIE_KEY = 'chistodvor_cookie_consent';
+
+  function readCookieChoice() {
+    try {
+      const v = localStorage.getItem(COOKIE_KEY);
+      if (v === 'all' || v === 'necessary') return v;
+    } catch (_) {}
+    const m = document.cookie.match(/(?:^|;\s*)chistodvor_cookie_consent=(all|necessary)/);
+    return m ? m[1] : null;
+  }
+
+  function saveCookieChoice(choice) {
+    try {
+      localStorage.setItem(COOKIE_KEY, choice);
+    } catch (_) {}
+    const maxAge = 180 * 24 * 60 * 60;
+    const secureFlag = location.protocol === 'https:' ? '; Secure' : '';
+    document.cookie = `${COOKIE_KEY}=${choice}; path=/; max-age=${maxAge}; SameSite=Lax${secureFlag}`;
+    if (choice === 'necessary') {
+      try {
+        localStorage.removeItem('cryo_snow_fx');
+      } catch (_) {}
+    }
+    const el = document.getElementById('ice-cookie-banner');
+    if (el) el.hidden = true;
+  }
+
+  function ensureCookieBanner() {
+    let banner = document.getElementById('ice-cookie-banner');
+    if (banner) return banner;
+    banner = document.createElement('aside');
+    banner.id = 'ice-cookie-banner';
+    banner.className = 'cookie-banner';
+    banner.setAttribute('role', 'dialog');
+    banner.setAttribute('aria-label', 'Настройки файлов Cookie');
+    banner.hidden = true;
+    banner.innerHTML = `
+      <div class="cookie-banner-copy">
+        <strong>Файлы Cookie и защита данных (РФ, 152-ФЗ).</strong>
+        Мы используем строго необходимые технические Cookie (авторизация админки и сохранение вашего выбора)
+        и не подключаем зарубежные рекламные трекеры. Подробнее — в
+        <a href="/legal/cookies">Политике Cookie</a> и <a href="/legal/privacy">Политике ПДн</a>.
+      </div>
+      <div class="cookie-banner-actions">
+        <button type="button" class="btn btn-sm" id="cookie-only-necessary">Только необходимые</button>
+        <button type="button" class="btn btn-sm btn-primary" id="cookie-accept-all">Принять все</button>
+      </div>
+    `;
+    document.body.appendChild(banner);
+    document.getElementById('cookie-only-necessary').addEventListener('click', () => saveCookieChoice('necessary'));
+    document.getElementById('cookie-accept-all').addEventListener('click', () => saveCookieChoice('all'));
+    return banner;
+  }
+
+  window.openCookieSettings = function openCookieSettings() {
+    const banner = ensureCookieBanner();
+    banner.hidden = false;
+  };
+
+  function hydrateLegalFooter() {
+    const footerOp = document.getElementById('legal-footer-operator');
+    if (!footerOp) return;
+    fetch('/api/v1/legal/public-meta')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((m) => {
+        if (!m) return;
+        const parts = [m.operator_name];
+        if (m.inn) parts.push(`ИНН ${m.inn}`);
+        if (m.ogrnip) parts.push(`ОГРНИП ${m.ogrnip}`);
+        if (m.rkn_reg_no) parts.push(`РКН № ${m.rkn_reg_no}`);
+        parts.push('18+');
+        footerOp.textContent = parts.join(' · ');
+        const dcEl = document.getElementById('legal-footer-dc');
+        if (dcEl && m.datacenter_info) {
+          dcEl.textContent = `${m.datacenter_info} · Контакт по ПДн: ${m.email}`;
+        }
+      })
+      .catch(() => {});
+  }
+
   document.addEventListener('DOMContentLoaded', () => {
     initFrostCanvas();
     updateClock();
     setInterval(updateClock, 1000);
+    const banner = ensureCookieBanner();
+    if (!readCookieChoice()) {
+      banner.hidden = false;
+    }
+    hydrateLegalFooter();
   });
 })();

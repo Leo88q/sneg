@@ -5,7 +5,7 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -77,13 +77,35 @@ class Settings(BaseSettings):
     admin_jwt_ttl_minutes: int = 480
     initial_owner_email: str = "owner@sneg.local"
     initial_owner_password: str = Field(default="admin12345")
-    public_offer_url: str = "https://sneg.example.ru/legal/offer"
-    privacy_policy_url: str = "https://sneg.example.ru/legal/privacy"
-    executor_offer_url: str = "https://sneg.example.ru/legal/executor-offer"
+    public_offer_url: str = "https://chistodvor.ru/legal/offer"
+    privacy_policy_url: str = "https://chistodvor.ru/legal/privacy"
+    executor_offer_url: str = "https://chistodvor.ru/legal/executor-offer"
+
+    # Юридические реквизиты оператора (152-ФЗ, 38-ФЗ, ЗоЗПП, 54-ФЗ)
+    brand_name: str = "ЧистоДвор"
+    legal_operator_name: str = "ИП Холматов Леонид Икрамович"
+    legal_inn: str = ""
+    legal_ogrnip: str = ""
+    legal_address: str = "Российская Федерация, Московская область"
+    legal_email: str = "privacy@chistodvor.ru"
+    legal_phone: str = ""
+    legal_rkn_reg_no: str = ""
+    legal_datacenter_info: str = (
+        "ЦОД на территории Российской Федерации (ООО «Таймвэб.Клауд», РФ)"
+    )
+    legal_doc_version: str = "2.0"
+    legal_doc_updated_date: str = "17.11.2026"
 
     # Наблюдаемость
     sentry_dsn: str = ""
     alerts_max_chat_id: int | None = None
+
+    @field_validator("max_dispatch_chat_id", "alerts_max_chat_id", mode="before")
+    @classmethod
+    def _empty_str_to_none(cls, value: object) -> object:
+        if isinstance(value, str) and value.strip() == "":
+            return None
+        return value
 
     @model_validator(mode="after")
     def validate_production_guards(self) -> Settings:

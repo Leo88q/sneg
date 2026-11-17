@@ -3,13 +3,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Снег-Диспетчер · Арктический пульт управления</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link
-    href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Unbounded:wght@500;600;700;800&display=swap"
-    rel="stylesheet"
-  />
+  <title>ЧистоДвор · Сервис уборки территории и диспетчеризации</title>
+  <link rel="stylesheet" href="/static/fonts.css" />
   <link rel="stylesheet" href="/static/styles.css" />
   <style>
     .portal-shell {
@@ -35,8 +30,8 @@
     }
 
     .hero-title {
-      font-size: clamp(28px, 3.8vw, 44px);
-      line-height: 1.08;
+      font-size: clamp(26px, 3.6vw, 42px);
+      line-height: 1.1;
       margin: 14px 0 14px;
       font-weight: 800;
       background: linear-gradient(180deg, #ffffff 0%, #c8ecff 68%, #7ed8fb 100%);
@@ -98,7 +93,7 @@
 
     .tel-cell .v {
       font-family: var(--font-mono);
-      font-size: 14px;
+      font-size: 13.5px;
       font-weight: 700;
       color: var(--text-crystal);
       margin-top: 4px;
@@ -209,10 +204,10 @@
         </svg>
       </div>
       <div class="brand-sub">
-        <span>СНЕГ-ДИСПЕТЧЕР</span>
-        <small>ARCTIC DISPATCH · MAX BOT PLATFORM</small>
+        <span>ЧИСТОДВОР</span>
+        <small>ДИСПЕТЧЕРИЗАЦИЯ УБОРКИ · MAX BOT (РФ)</small>
       </div>
-      <span class="brand-badge">MVP v2.0</span>
+      <span class="brand-badge">v2.0</span>
     </div>
 
     <div class="topbar-meta">
@@ -227,9 +222,10 @@
           </svg>
           Снег
         </button>
-        <a class="btn btn-primary btn-sm" href="/simulator">Симулятор MAX</a>
-        <a class="btn btn-sm" href="/admin">Веб-админка</a>
-        <a class="btn btn-sm btn-ghost" href="/docs">OpenAPI</a>
+        <a class="btn btn-primary btn-sm" id="nav-sim-link" href="/simulator" style="display:none">Симулятор MAX</a>
+        <a class="btn btn-sm" href="/legal">Правовой центр</a>
+        <a class="btn btn-sm" href="/admin">Админ-панель</a>
+        <a class="btn btn-sm btn-ghost" id="nav-docs-link" href="/docs" style="display:none">OpenAPI</a>
       </nav>
     </div>
   </header>
@@ -238,12 +234,12 @@
     <section class="hero-grid">
       <article class="ice-panel ice-interactive hero-main">
         <div>
-          <div class="section-kicker">ЗИМНЯЯ ДИСПЕТЧЕРИЗАЦИЯ · ЛЮБЕРЕЦКИЙ УЗЕЛ</div>
-          <h1 class="hero-title">Ледяной контроль уборки снега и помощи авто</h1>
+          <div class="section-kicker">ДИСПЕТЧЕРИЗАЦИЯ УЧАСТКОВ · МОСКОВСКАЯ ОБЛАСТЬ</div>
+          <h1 class="hero-title">Уборка снега, помощь авто и сезонные работы на участке</h1>
           <p class="hero-lead">
-            Платформа приёма заказов в мессенджере MAX с точным расчётом до 50 ₽,
-            авансовой защитой СБП (ЮKassa + 54-ФЗ), атомарной биржей бригады,
-            обязательным фотоконтролем «ДО / ПОСЛЕ» и кабинетом диспетчера.
+            Приём заказов в российском мессенджере MAX с прозрачным предварительным расчётом
+            до 50 ₽ без скрытых платежей, оплатой по СБП с кассовыми чеками 54-ФЗ
+            и обязательным фотоконтролем результата «ДО / ПОСЛЕ».
           </p>
           <div class="zone-strip">
             <span class="pill pill-blue">МАЛАХОВКА</span>
@@ -257,62 +253,71 @@
         </div>
 
         <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">
-          <a class="btn btn-primary" href="/simulator">
+          <a class="btn btn-primary" id="hero-sim-btn" href="/simulator" style="display:none">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
             </svg>
             Открыть симулятор MAX
           </a>
+          <a class="btn btn-primary" href="/legal/offer">Условия и оферта</a>
           <a class="btn btn-success" href="/admin">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" />
               <rect x="14" y="14" width="7" height="7" /><rect x="3" y="14" width="7" height="7" />
             </svg>
-            Пульт владельца / бригадира
+            Кабинет диспетчера
           </a>
-          <a class="btn btn-ghost" href="/docs">OpenAPI 3.1 ↗</a>
+          <a class="btn btn-ghost" href="/legal/my-data">Мои данные (152-ФЗ)</a>
         </div>
       </article>
 
       <aside class="ice-panel ice-interactive hero-telemetry">
         <div>
           <div class="tel-header">
-            <span class="section-kicker">ТЕЛЕМЕТРИЯ УЗЛА</span>
+            <span class="section-kicker">СТАТУС ПЛАТФОРМЫ (РФ)</span>
             <span class="pill pill-green" id="sys-state-pill">ПРОВЕРКА…</span>
           </div>
 
           <div class="tel-rows" style="margin-top:14px">
             <div class="tel-cell">
-              <div class="k">ТРАНСПОРТ MAX</div>
+              <div class="k">МЕССЕНДЖЕР</div>
               <div class="v" id="tel-messenger">—</div>
             </div>
             <div class="tel-cell">
-              <div class="k">ПЛАТЁЖНЫЙ ШЛЮЗ</div>
+              <div class="k">ОПЛАТА И 54-ФЗ</div>
               <div class="v" id="tel-pay">—</div>
             </div>
             <div class="tel-cell">
-              <div class="k">ХРАНИЛИЩЕ ФОТО</div>
+              <div class="k">ХРАНЕНИЕ В РФ</div>
               <div class="v" id="tel-storage">—</div>
             </div>
             <div class="tel-cell">
-              <div class="k">API ENDPOINT</div>
-              <div class="v">platform-api2</div>
+              <div class="k">ЗАКОНОДАТЕЛЬСТВО</div>
+              <div class="v">152-ФЗ · РФ</div>
             </div>
           </div>
         </div>
 
-        <div class="tel-cell" style="background:rgba(140,228,255,0.055)">
+        <div class="tel-cell" id="dev-creds-box" style="display:none;background:rgba(140,228,255,0.055)">
           <div class="k" style="margin-bottom:6px">ТЕСТОВЫЕ УЧЁТНЫЕ ЗАПИСИ (DEV)</div>
           <div class="mono" style="font-size:12px;color:var(--text-frost);line-height:1.7">
             Владелец: <code>owner@sneg.local</code> / <code>admin12345</code><br />
             Бригадир: <code>foreman@sneg.local</code> / <code>foreman12345</code>
           </div>
         </div>
+
+        <div class="tel-cell" id="prod-compliance-box" style="background:rgba(140,228,255,0.055)">
+          <div class="k" style="margin-bottom:6px">ЛОКАЛИЗАЦИЯ И ПРОЗРАЧНОСТЬ</div>
+          <div style="font-size:12.5px;color:var(--text-frost);line-height:1.6">
+            База данных и фотоотчёты размещены в российском ЦОД.
+            Без зарубежных трекеров, скрытых платежей и автосписаний.
+          </div>
+        </div>
       </aside>
     </section>
 
     <section class="portals-grid">
-      <article class="ice-panel ice-interactive portal-monolith">
+      <article class="ice-panel ice-interactive portal-monolith" id="card-simulator" style="display:none">
         <div>
           <div class="portal-icon">
             <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8">
@@ -321,12 +326,29 @@
           </div>
           <h2>Мультичат-симулятор MAX</h2>
           <p>
-            Полноценный стенд из трёх живых окон: Клиент, Общий чат бригады и Личка
-            исполнителя/бригадира. Гео-радар, демо-фото ДО/ПОСЛЕ, 1-клик гонка «Беру»
-            и оплата СБП поверх боевого роутера бота.
+            Стенд из трёх окон: Клиент, Общий чат бригады и Личка исполнителя/бригадира.
+            Гео-радар, фото ДО/ПОСЛЕ, проверка гонки «Беру» и расчёт СБП поверх боевого роутера.
           </p>
         </div>
         <a class="btn btn-primary" href="/simulator">Запустить симулятор →</a>
+      </article>
+
+      <article class="ice-panel ice-interactive portal-monolith" id="card-legal-hub">
+        <div>
+          <div class="portal-icon">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+              <polyline points="9 12 11 14 15 10" />
+            </svg>
+          </div>
+          <h2>Правовой центр и защита ПДн</h2>
+          <p>
+            Политика обработки ПДн (152-ФЗ), отдельное Согласие, Публичная оферта,
+            прозрачные условия возврата СБП, реквизиты оператора, лицензии шрифтов
+            и онлайн-форма удаления данных.
+          </p>
+        </div>
+        <a class="btn btn-primary" href="/legal">Открыть документы →</a>
       </article>
 
       <article class="ice-panel ice-interactive portal-monolith">
@@ -337,53 +359,77 @@
               <path d="M2 17l10 5 10-5M2 12l10 5 10-5" />
             </svg>
           </div>
-          <h2>Веб-админ-панель</h2>
+          <h2>Веб-админ-панель диспетчера</h2>
           <p>
-            Операционный дашборд KPI, досье заказов с галереей фото ДО/ПОСЛЕ,
-            редактор коэффициентов и песочница тарифов, управление геозонами,
-            допусками исполнителей, спорами и ведомостями НПД.
+            Операционный дашборд заказов, галерея фотоотчётов ДО/ПОСЛЕ,
+            редактор тарифов и геозон, допуски исполнителей-самозанятых (НПД),
+            ведомости выплат и обработка запросов субъектов ПДн.
           </p>
         </div>
-        <a class="btn btn-success" href="/admin">Открыть пульт →</a>
+        <a class="btn btn-success" href="/admin">Открыть кабинет →</a>
       </article>
 
       <article class="ice-panel ice-interactive portal-monolith">
         <div>
           <div class="portal-icon amber">
             <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8">
-              <polyline points="16 18 22 12 16 6" />
-              <polyline points="8 6 2 12 8 18" />
+              <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6h14z" />
             </svg>
           </div>
-          <h2>REST API &amp; Вебхуки</h2>
+          <h2>Мои данные и возвраты</h2>
           <p>
-            Спецификация OpenAPI 3.1: подписанный вебхук MAX с идемпотентностью,
-            ЮKassa СБП с двойной IP+GET проверкой, метрики Prometheus и полный
-            административный API.
+            Управление персональными данными по ст. 14 и ст. 21 152-ФЗ: запрос выгрузки,
+            отписка от рассылок или полное удаление профиля, а также подробные правила
+            возврата предоплаты по СБП.
           </p>
         </div>
-        <a class="btn" href="/docs">Открыть Swagger →</a>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <a class="btn btn-danger btn-sm" href="/legal/my-data">Удалить мои данные</a>
+          <a class="btn btn-sm" href="/legal/refunds">Условия возврата</a>
+        </div>
       </article>
     </section>
 
     <section class="specs-bar">
       <div class="spec-chip">
         <div class="num">50 ₽</div>
-        <div class="desc">Точное Decimal-округление по формулам ТЗ</div>
+        <div class="desc">Точное округление цены до заказа, без скрытых доплат</div>
       </div>
       <div class="spec-chip">
         <div class="num">30–50%</div>
-        <div class="desc">Аванс СБП + авто-чек 54-ФЗ</div>
-      </div>
-      <div class="spec-chip">
-        <div class="num">1 из N</div>
-        <div class="desc">Атомарный захват «Беру» без гонок</div>
+        <div class="desc">Предоплата СБП с кассовым чеком 54-ФЗ</div>
       </div>
       <div class="spec-chip">
         <div class="num">ДО / ПОСЛЕ</div>
-        <div class="desc">Обязательный фотоконтроль каждого этапа</div>
+        <div class="desc">Фотоотчёт результата и 24 часа на приёмку</div>
+      </div>
+      <div class="spec-chip">
+        <div class="num">152-ФЗ РФ</div>
+        <div class="desc">Локализованная БД в РФ и ноль зарубежных трекеров</div>
       </div>
     </section>
+
+    <footer class="ice-panel site-legal-footer">
+      <div class="site-legal-top">
+        <div class="site-legal-op" id="legal-footer-operator">ИП Холматов Леонид Икрамович · 18+</div>
+        <div class="mono" style="font-size:11px" id="legal-footer-dc">
+          Первичные БД и файлы размещены на серверах в РФ (152-ФЗ)
+        </div>
+      </div>
+      <div class="site-legal-links">
+        <a href="/legal">Сводка 20 требований РФ</a>
+        <a href="/legal/privacy">Политика ПДн</a>
+        <a href="/legal/consent">Согласие на ПДн</a>
+        <a href="/legal/offer">Оферта клиента</a>
+        <a href="/legal/executor-offer">Оферта исполнителя (НПД)</a>
+        <a href="/legal/refunds">Условия возврата</a>
+        <a href="/legal/cookies">Политика Cookie</a>
+        <a href="/legal/requisites">Реквизиты и РКН</a>
+        <a href="/legal/licenses">Лицензии шрифтов</a>
+        <a class="danger-link" href="/legal/my-data">Удалить мои данные / Отписаться</a>
+        <button type="button" onclick="window.openCookieSettings && window.openCookieSettings()">Настройки Cookie</button>
+      </div>
+    </footer>
   </main>
 
   <script src="/static/frost-fx.js"></script>
@@ -395,6 +441,19 @@
         document.getElementById('tel-messenger').textContent = (d.messenger || '—').toUpperCase();
         document.getElementById('tel-pay').textContent = (d.payment_provider || '—').toUpperCase();
         document.getElementById('tel-storage').textContent = (d.storage || '—').toUpperCase();
+
+        const simEnabled = d.simulator_enabled === 'true';
+        const isDev = d.app_env === 'development';
+        if (simEnabled) {
+          document.getElementById('nav-sim-link').style.display = 'inline-flex';
+          document.getElementById('hero-sim-btn').style.display = 'inline-flex';
+          document.getElementById('card-simulator').style.display = 'flex';
+        }
+        if (isDev) {
+          document.getElementById('nav-docs-link').style.display = 'inline-flex';
+          document.getElementById('dev-creds-box').style.display = 'block';
+          document.getElementById('prod-compliance-box').style.display = 'none';
+        }
       })
       .catch(() => {
         const p = document.getElementById('sys-state-pill');

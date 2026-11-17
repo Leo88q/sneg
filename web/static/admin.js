@@ -111,6 +111,7 @@ async function loadTab(tab) {
     else if (tab === 'disputes') await renderDisputes(root);
     else if (tab === 'payouts') await renderPayouts(root);
     else if (tab === 'audit') await renderAudit(root);
+    else if (tab === 'privacy') await renderPrivacyRequests(root);
   } catch (e) {
     root.innerHTML = `<div class="ice-panel"><span class="pill pill-red">ОШИБКА</span> <span style="margin-left:8px">${esc(e.message)}</span></div>`;
   }
@@ -918,6 +919,127 @@ async function renderAudit(root) {
     </div>
   `;
 }
+
+async function renderPrivacyRequests(root) {
+  const rows = await api('/api/v1/admin/data-requests');
+  const typeLabels = {
+    delete_data: 'Удаление ПДн (ст. 21)',
+    unsubscribe_marketing: 'Отписка от рассылок',
+    export_data: 'Выгрузка ПДн (ст. 14)',
+    revoke_consent: 'Отзыв согласия ПДн',
+  };
+  const statusPill = (s) => {
+    if (s === 'completed') return '<span class="pill pill-green">ВЫПОЛНЕНО</span>';
+    if (s === 'rejected') return '<span class="pill pill-red">ОТКЛОНЕНО</span>';
+    return '<span class="pill pill-warn">В РАБОТЕ (ДО 10 ДН.)</span>';
+  };
+
+  root.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap">
+      <div>
+        <div class="section-kicker">152-ФЗ СТ. 14 И СТ. 21</div>
+        <h2 style="margin:4px 0 0">Запросы субъектов персональных данных</h2>
+      </div>
+      <a class="btn btn-sm" href="/legal/my-data" target="_blank">Открыть публичную форму ↗</a>
+    </div>
+
+    <div class="ice-panel table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Номер</th>
+            <th>Дата</th>
+            <th>Тип запроса</th>
+            <th>Контакт / MAX ID</th>
+            <th>Источник</th>
+            <th>Статус</th>
+            <th>Действия</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${
+            rows.length
+              ? rows
+                  .map(
+                    (r) => `<tr>
+              <td class="mono"><b>${esc(r.ticket_code)}</b></td>
+              <td class="mono" style="font-size:11.5px;color:var(--text-muted)">${(r.created_at || '').slice(0, 19)}</td>
+              <td>${esc(typeLabels[r.request_type] || r.request_type)}</td>
+              <td>
+                <div>${esc(r.contact_value)}</div>
+                ${r.max_user_id ? `<div class="mono" style="font-size:11px;color:var(--text-muted)">MAX: ${r.max_user_id}</div>` : ''}
+                ${r.details ? `<div style="font-size:11.5px;color:var(--text-muted);margin-top:3px">${esc(r.details)}</div>` : ''}
+              </td>
+              <td><span class="pill pill-blue">${esc(r.source)}</span></td>
+              <td>${statusPill(r.status)}</td>
+              <td>
+                ${
+                  r.status === 'pending'
+                    ? `<div style="display:flex;gap:6px;flex-wrap:wrap">
+                        <button class="btn btn-sm btn-success" onclick="resolveDsr('${r.id}', false)">Выполнить</button>
+                        ${
+                          r.user_id && (r.request_type === 'delete_data' || r.request_type === 'revoke_consent')
+                            ? `<button class="btn btn-sm btn-danger" onclick="resolveDsr('${r.id}', true)">Обезличить ПДн</button>`
+                            : ''
+                        }
+                      </div>`
+                    : `<span style="font-size:11.5px;color:var(--text-muted)">${esc(r.resolution_note || '—')}</span>`
+                }
+              </td>
+            </tr>`
+                  )
+                  .join('')
+              : '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:20px">Обращений субъектов ПДн пока нет.</td></tr>'
+          }
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+async function resolveDsr(requestId, anonymizeUser) {
+  const dlg = await window.IceDialog.form({
+    title: anonymizeUser ? 'Выполнить и обезличить ПДн пользователя' : 'Закрыть обращение субъекта ПДн',
+    subtitle: anonymizeUser
+      ? 'ФИО, username, телефоны и email пользователя будут безвозвратно очищены (фискальная история 54-ФЗ сохранится в обезличенном виде).'
+      : 'Укажите комментарий об исполнении обращения по 152-ФЗ.',
+    submitText: anonymizeUser ? 'Обезличить и закрыть' : 'Подтвердить выполнение',
+    submitClass: anonymizeUser ? 'btn-danger' : 'btn-success',
+    fields: [
+      {
+        name: 'resolution_note',
+        label: 'Комментарий исполнения',
+        type: 'textarea',
+        value: anonymizeUser ? 'ПДн субъекта обезличены по ст. 21 152-ФЗ' : 'Запрос исполнен в срок по 152-ФЗ',
+      },
+    ],
+  });
+  if (!dlg) return;
+  try {
+    await api(`/api/v1/admin/data-requests/${requestId}/resolve`, {
+      method: 'POST',
+      body: JSON.stringify({
+        status: 'completed',
+        anonymize_user: anonymizeUser,
+        resolution_note: dlg.resolution_note || '',
+      }),
+    });
+    toast(anonymizeUser ? 'ПДн обезличены, запрос закрыт' : 'Запрос ПДн выполнен');
+    loadTab('privacy');
+  } catch (e) {
+    toast(e.message);
+  }
+}
+
+fetch('/ready')
+  .then((r) => (r.ok ? r.json() : null))
+  .then((d) => {
+    if (d && d.app_env === 'development') {
+      const box = document.getElementById('dev-quick-roles');
+      if (box) box.style.display = 'grid';
+    }
+  })
+  .catch(() => {});
 
 api('/api/v1/admin/auth/me')
   .then((me) => {

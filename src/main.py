@@ -14,6 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from src.api.admin import media_router
 from src.api.admin import router as admin_router
 from src.api.health import router as health_router
+from src.api.legal import router as legal_router
 from src.api.mock_pay import router as mock_pay_router
 from src.api.simulator import router as simulator_router
 from src.api.webhooks import router as webhooks_router
@@ -86,6 +87,7 @@ def create_app(
         )
 
     app.include_router(health_router)
+    app.include_router(legal_router)
     app.include_router(webhooks_router)
     app.include_router(admin_router)
     app.include_router(media_router)
@@ -122,12 +124,7 @@ def create_app(
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Обработка оплаты · Снег-Диспетчер</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link
-    href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&family=Unbounded:wght@600;700&display=swap"
-    rel="stylesheet"
-  />
+  <link rel="stylesheet" href="/static/fonts.css" />
   <link rel="stylesheet" href="/static/styles.css" />
 </head>
 <body style="display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px">

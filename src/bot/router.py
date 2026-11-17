@@ -6,7 +6,9 @@ import hashlib
 import json
 import logging
 import re
+import secrets
 import uuid
+from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
@@ -57,6 +59,7 @@ from src.domain.pricing.calculator import (
 )
 from src.infra.db.models import (
     BotChat,
+    DataSubjectRequest,
     Dispute,
     ExecutorProfile,
     GeoZone,
@@ -342,6 +345,100 @@ class BotRouter:
 
         if text in ("/start", "/menu", "Меню"):
             await self._on_bot_started({"user": sender, "chat_id": chat_id, "payload": ""})
+            return
+
+        if text in ("/privacy", "/legal", "Правовая информация"):
+            base = self.settings.public_base_url.rstrip("/") or "https://chistodvor.ru"
+            await self.messenger.send_message(
+                MessageTarget(user_id=user.max_user_id),
+                OutgoingMessage(
+                    text=(
+                        f"⚖️ **Правовая информация и защита ПДн ({self.settings.brand_name})**\n\n"
+                        f"• Политика ПДн (152-ФЗ): {base}/legal/privacy\n"
+                        f"• Согласие на ПДн: {base}/legal/consent\n"
+                        f"• Публичная оферта: {base}/legal/offer\n"
+                        f"• Условия возврата (СБП): {base}/legal/refunds\n"
+                        f"• Реквизиты и РКН: {base}/legal/requisites\n"
+                        f"• Удаление данных на сайте: {base}/legal/my-data\n\n"
+                        "Команды прямо в боте:\n"
+                        "• `/unsubscribe` — мгновенная отписка от рассылок\n"
+                        "• `/delete_my_data` — подать запрос на удаление моих ПДн"
+                    )
+                ),
+            )
+            return
+
+        if text == "/unsubscribe":
+            now = datetime.now(UTC)
+            ticket_code = f"DSR-{now.strftime('%Y%m%d')}-{secrets.token_hex(3).upper()}"
+            async with self.session_factory() as session:
+                session.add(
+                    UserConsent(
+                        user_id=user.id,
+                        consent_type="marketing_revoked",
+                        document_version=self.settings.legal_doc_version,
+                        source="max_bot",
+                    )
+                )
+                session.add(
+                    DataSubjectRequest(
+                        ticket_code=ticket_code,
+                        request_type="unsubscribe_marketing",
+                        status="completed",
+                        contact_value=f"max:{user.max_user_id}",
+                        max_user_id=user.max_user_id,
+                        user_id=user.id,
+                        consent_accepted_at=now,
+                        age_confirmed=True,
+                        source="max_bot",
+                        resolution_note="Отписка от рассылок через команду /unsubscribe в MAX",
+                        resolved_at=now,
+                    )
+                )
+                await session.commit()
+            await self.messenger.send_message(
+                MessageTarget(user_id=user.max_user_id),
+                OutgoingMessage(
+                    text=(
+                        f"✅ **Вы отписаны от информационных и рекламных рассылок** "
+                        f"(обращение `{ticket_code}`).\n"
+                        "Сервисные уведомления по активным заказам сохраняются."
+                    )
+                ),
+            )
+            return
+
+        if text == "/delete_my_data":
+            now = datetime.now(UTC)
+            ticket_code = f"DSR-{now.strftime('%Y%m%d')}-{secrets.token_hex(3).upper()}"
+            async with self.session_factory() as session:
+                session.add(
+                    DataSubjectRequest(
+                        ticket_code=ticket_code,
+                        request_type="delete_data",
+                        status="pending",
+                        contact_value=f"max:{user.max_user_id}",
+                        max_user_id=user.max_user_id,
+                        user_id=user.id,
+                        details="Запрос на удаление ПДн подан через команду /delete_my_data в MAX",
+                        consent_accepted_at=now,
+                        age_confirmed=True,
+                        source="max_bot",
+                    )
+                )
+                await session.commit()
+            await self.messenger.send_message(
+                MessageTarget(user_id=user.max_user_id),
+                OutgoingMessage(
+                    text=(
+                        f"🛡 **Запрос на удаление ваших персональных данных зарегистрирован** "
+                        f"(номер `{ticket_code}`).\n\n"
+                        "Срок исполнения по ст. 21 152-ФЗ — **до 10 рабочих дней**. "
+                        "Данные профиля будут удалены/обезличены (за исключением фискальных записей "
+                        "54-ФЗ, хранение которых обязательно по закону РФ)."
+                    )
+                ),
+            )
             return
 
         rec = await self.fsm.get(user.max_user_id)
