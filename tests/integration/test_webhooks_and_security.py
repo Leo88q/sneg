@@ -220,3 +220,49 @@ async def test_yookassa_webhook_verifies_via_provider_and_publishes_order(
         assert refreshed is not None
         assert refreshed.status == OrderStatus.SEARCHING_EXECUTOR.value
         assert refreshed.paid_amount == pay.amount
+
+
+def test_max_setup_validator() -> None:
+    from src.bot.setup_max import validate_max_setup_settings
+
+    # Пустой токен -> ошибка
+    with pytest.raises(ValueError, match="MAX_BOT_TOKEN"):
+        validate_max_setup_settings(
+            Settings(
+                max_bot_token="",
+                public_base_url="https://chistodvor.ru",
+                max_webhook_secret="prod_secret_987654",
+            )
+        )
+
+    # HTTP вместо HTTPS -> ошибка (MAX с 25.05.2026 требует только HTTPS)
+    with pytest.raises(ValueError, match="https://"):
+        validate_max_setup_settings(
+            Settings(
+                max_bot_token="real-max-token",
+                public_base_url="http://chistodvor.ru",
+                max_webhook_secret="prod_secret_987654",
+            )
+        )
+
+    # Недопустимые символы в секрете -> ошибка
+    with pytest.raises(ValueError, match="MAX_WEBHOOK_SECRET"):
+        validate_max_setup_settings(
+            Settings(
+                max_bot_token="real-max-token",
+                public_base_url="https://chistodvor.ru",
+                max_webhook_secret="bad secret with spaces!",
+            )
+        )
+
+    # Корректные боевые настройки -> (https://chistodvor.ru/webhooks/max, secret)
+    url, secret = validate_max_setup_settings(
+        Settings(
+            max_bot_token="real-max-token",
+            public_base_url="https://chistodvor.ru/",
+            max_webhook_secret="chistodvor_max_webhook_2026_abc123",
+        )
+    )
+    assert url == "https://chistodvor.ru/webhooks/max"
+    assert secret == "chistodvor_max_webhook_2026_abc123"
+

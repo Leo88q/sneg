@@ -1473,33 +1473,54 @@ class BotRouter:
 
         await self.fsm.clear(user.max_user_id)
         timeout_min = 15 if svc == ServiceType.CAR_RESCUE else 60
+
+        use_online_pay_btn = (
+            self.settings.payment_provider == "yookassa"
+            or self.settings.app_env == "development"
+        )
+        if use_online_pay_btn:
+            msg_text = (
+                f"✅ **Заказ #{order.public_number} создан!**\n"
+                f"Оплатите аванс **{payment.amount:.0f} ₽** через СБП в течение {timeout_min} минут — "
+                "сразу после оплаты заказ уйдёт в бригаду."
+            )
+            kb_rows: list[list[InlineButton]] = [
+                [
+                    InlineButton(
+                        type="link",
+                        text=f"💳 Оплатить аванс {payment.amount:.0f} ₽ (СБП)",
+                        url=payment.confirmation_url or f"/mock-pay/{payment.id}",
+                    )
+                ],
+                [
+                    InlineButton(
+                        type="callback",
+                        text="❌ Отменить заказ",
+                        payload=f"ord:cancel:{order.id}",
+                    )
+                ],
+            ]
+        else:
+            msg_text = (
+                f"✅ **Заказ #{order.public_number} принят!**\n"
+                f"Ориентировочная стоимость: **{order.estimated_total:.0f} ₽** "
+                f"(аванс **{payment.amount:.0f} ₽**).\n"
+                "Диспетчер свяжется с вами в течение 10 минут для подтверждения выезда и оплаты.\n"
+                f"Телефон диспетчера: {self.settings.legal_phone}"
+            )
+            kb_rows = [
+                [
+                    InlineButton(
+                        type="callback",
+                        text="❌ Отменить заказ",
+                        payload=f"ord:cancel:{order.id}",
+                    )
+                ]
+            ]
+
         await self.messenger.send_message(
             MessageTarget(user_id=user.max_user_id),
-            OutgoingMessage(
-                text=(
-                    f"✅ **Заказ #{order.public_number} создан!**\n"
-                    f"Оплатите аванс **{payment.amount:.0f} ₽** через СБП в течение {timeout_min} минут — "
-                    "сразу после оплаты заказ уйдёт в бригаду."
-                ),
-                keyboard=InlineKeyboard(
-                    rows=[
-                        [
-                            InlineButton(
-                                type="link",
-                                text=f"💳 Оплатить аванс {payment.amount:.0f} ₽ (СБП)",
-                                url=payment.confirmation_url or f"/mock-pay/{payment.id}",
-                            )
-                        ],
-                        [
-                            InlineButton(
-                                type="callback",
-                                text="❌ Отменить заказ",
-                                payload=f"ord:cancel:{order.id}",
-                            )
-                        ],
-                    ]
-                ),
-            ),
+            OutgoingMessage(text=msg_text, keyboard=InlineKeyboard(rows=kb_rows)),
         )
 
     async def _show_client_orders(self, user: User) -> None:

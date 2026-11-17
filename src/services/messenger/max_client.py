@@ -228,6 +228,11 @@ class MaxApiClient:
             raise ExternalIntegrationError(f"Не удалось скачать медиа MAX: {resp.status_code}")
         return resp.content
 
+    async def list_webhooks(self) -> list[dict[str, Any]]:
+        data = await self._request("GET", "/subscriptions")
+        subs = data.get("subscriptions", [])
+        return list(subs) if isinstance(subs, list) else []
+
     async def setup_webhook(
         self, *, url: str, secret: str, update_types: list[str]
     ) -> bool:
