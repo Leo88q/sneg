@@ -51,7 +51,8 @@ async def test_public_catalog_and_live_quote_across_services(client: Any) -> Non
     assert len(cat["services"]) == 7
     svc_by_code = {s["code"]: s for s in cat["services"]}
     assert svc_by_code["snow_yard"]["price_from_label"] == "от 40 ₽/м²"
-    assert svc_by_code["snow_road"]["price_from_label"] == "от 20 ₽/м²"
+    assert svc_by_code["snow_road"]["price_from_label"] == "от 30 ₽/м²"
+    assert svc_by_code["car_rescue"]["price_from_label"] == "от 3500 ₽"
     assert svc_by_code["movers"]["price_from_label"] == "от 750 ₽/ч"
     assert svc_by_code["reagents"]["price_from_label"] == "от 20 ₽/м²"
     zone_codes = {z["code"] for z in cat["zones"]}
@@ -114,6 +115,8 @@ async def test_public_catalog_and_live_quote_across_services(client: Any) -> Non
         assert total > 0
         assert total % 50 == 0
         assert abs((advance + remainder) - total) < 0.01
+        if payload.get("snow_removal"):
+            assert q["advance_pct"] == 50
 
 
 @pytest.mark.asyncio

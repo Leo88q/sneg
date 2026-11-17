@@ -274,11 +274,11 @@ async def get_public_catalog(
             "title": SERVICE_LABELS[ServiceType.SNOW_ROAD],
             "short_title": "Дорога и проезд",
             "category": "Зима · СНТ и проезды",
-            "price_from_label": f"от {snow_methods.get('tractor', {}).get('rate_per_m2', 20)} ₽/м²",
+            "price_from_label": f"от {snow_methods.get('tractor', {}).get('rate_per_m2', 30)} ₽/м²",
             "min_price_rub": int(
-                snow_methods.get("snowblower_or_miniloader", {}).get("min_work_price", 3000)
+                snow_methods.get("snowblower_or_miniloader", {}).get("min_work_price", 5500)
             ),
-            "advance_pct": int(adv_pcts.get("snow_road", 30)),
+            "advance_pct": int(adv_pcts.get("snow_road", 50)),
             "summary": "Подъезд к дому, улица в СНТ, заезд в ворота. Автоподбор мини-погрузчика или трактора под ширину проезда.",
         },
         {
@@ -286,8 +286,8 @@ async def get_public_catalog(
             "title": SERVICE_LABELS[ServiceType.CAR_RESCUE],
             "short_title": "Застряла машина",
             "category": "Срочный выезд",
-            "price_from_label": f"от {int(car_cfg.get('base_price', 2500))} ₽",
-            "min_price_rub": int(car_cfg.get("base_price", 2500)),
+            "price_from_label": f"от {int(car_cfg.get('base_price', 3500))} ₽",
+            "min_price_rub": int(car_cfg.get("base_price", 3500)),
             "advance_pct": int(adv_pcts.get("car_rescue", 50)),
             "summary": "Откапываем и вызволяем авто из сугроба или колеи. Радиус 5 км включён в базовую цену.",
         },
@@ -405,7 +405,12 @@ async def quote_public_order(
     breakdown = calculate_price(calc_in, tariff.config_json)
     adv_pct = int(
         to_decimal(
-            tariff.config_json.get("advance_pct_by_service", {}).get(body.service_type.value, 30)
+            breakdown.pricing_snapshot.get(
+                "advance_pct",
+                tariff.config_json.get("advance_pct_by_service", {}).get(
+                    body.service_type.value, 30
+                ),
+            )
         )
     )
 

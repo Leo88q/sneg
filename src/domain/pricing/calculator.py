@@ -57,8 +57,8 @@ def auto_select_cleaning_method(
     road_length_m: Decimal | None = None,
 ) -> CleaningMethod:
     thresholds = tariff_config["snow"]["auto_select_thresholds_m2"]
-    manual_max = Decimal(str(thresholds.get("manual_max", 80)))
-    small_max = Decimal(str(thresholds.get("small_tech_max", 400)))
+    manual_max = Decimal(str(thresholds.get("manual_max", 100)))
+    small_max = Decimal(str(thresholds.get("small_tech_max", 350)))
 
     if access_constraint == AccessConstraint.NARROW_GATE:
         if area_m2 <= Decimal("150") and depth_bucket != DepthBucket.OVER_30:
@@ -246,7 +246,7 @@ def calculate_price(
         vehicle_map = rcfg.get("vehicle_surcharge", {})
         vehicle_add = to_decimal(vehicle_map.get(inp.vehicle_type, 0))
         free_km = Decimal(str(rcfg.get("free_radius_km", 5)))
-        per_km = to_decimal(rcfg.get("per_km_rate", 100))
+        per_km = to_decimal(rcfg.get("per_km_rate", 120))
         billable_km = max(0, math.ceil(float(inp.distance_km - free_km)))
         km_add = (Decimal(billable_km) * per_km).quantize(Decimal("0.01"))
 
@@ -287,7 +287,7 @@ def calculate_price(
         if svc == ServiceType.MOVERS and inp.floors_without_lift > 0:
             floor_rate = to_decimal(hcfg.get("floor_no_lift_surcharge_per_worker", 200))
             floor_add = floor_rate * Decimal(inp.floors_without_lift) * Decimal(inp.workers_count)
-        equip_add = to_decimal(hcfg.get("equipment_fee", 1500)) if inp.needs_equipment else ZERO
+        equip_add = to_decimal(hcfg.get("equipment_fee", 2000)) if inp.needs_equipment else ZERO
         extras_cost = (floor_add + equip_add).quantize(Decimal("0.01"))
 
         subtotal = work_cost + dispatch_fee + extras_cost
@@ -340,6 +340,9 @@ def calculate_price(
         raise ValidationAppError(f"Неизвестный тип услуги: {svc}")
 
     advance_pct = to_decimal(tariff_config["advance_pct_by_service"].get(svc.value, 30))
+    if selected_method == CleaningMethod.TRACTOR or inp.snow_removal:
+        sub_adv = to_decimal(tariff_config.get("subcontract_advance_pct", 50))
+        advance_pct = max(advance_pct, sub_adv)
     raw_advance = round_to_step(estimated_total * advance_pct / HUNDRED, step)
     advance_amount = min(estimated_total, max(min_advance, raw_advance))
     if estimated_total < min_advance:
@@ -358,6 +361,66 @@ def calculate_price(
         work_cost * share_pct / HUNDRED + dispatch_fee * dispatch_comp_pct / HUNDRED
     ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
+    # Юнит-экономика для владельца (учитывает аренду техники на субподряде, выплату бригаде и УСН+ЮKassa)
+    tax_pct = to_decimal(tariff_config.get("tax_and_acquiring_pct", 7.9))
+    tax_and_acquiring = (estimated_total * tax_pct / HUNDRED).quantize(
+        Decimal("0.01"), rounding=ROUND_HALF_UP
+    )
+    rental_cfg = tariff_config.get("equipment_rental_estimates", {})
+    equipment_rental = ZERO
+    labor_payout = est_payout
+    requires_rental = False
+
+    if svc in (ServiceType.SNOW_YARD, ServiceType.SNOW_ROAD):
+        if selected_method == CleaningMethod.TRACTOR:
+            requires_rental = True
+            tr_share = to_decimal(rental_cfg.get("tractor_subcontract_share_pct", 70))
+            equipment_rental = (work_cost * tr_share / HUNDRED + dispatch_fee).quantize(
+                Decimal("0.01"), rounding=ROUND_HALF_UP
+            )
+            labor_payout = ZERO
+        elif selected_method == CleaningMethod.SNOWBLOWER_OR_MINILOADER:
+            requires_rental = True
+            sb_rent = to_decimal(rental_cfg.get("snowblower_rental_rub", 2200))
+            equipment_rental = min(
+                (work_cost * Decimal("0.45")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP),
+                sb_rent,
+            )
+            labor_base = max(ZERO, work_cost - equipment_rental)
+            labor_payout = (
+                labor_base * share_pct / HUNDRED + dispatch_fee * dispatch_comp_pct / HUNDRED
+            ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        if inp.snow_removal and extras_cost > ZERO:
+            requires_rental = True
+            rem_share = to_decimal(rental_cfg.get("snow_removal_subcontract_share_pct", 72))
+            equipment_rental = (
+                equipment_rental + extras_cost * rem_share / HUNDRED
+            ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    elif svc == ServiceType.CAR_RESCUE:
+        requires_rental = True
+        cr_share = to_decimal(rental_cfg.get("car_rescue_subcontract_share_pct", 65))
+        equipment_rental = (work_cost * cr_share / HUNDRED + dispatch_fee).quantize(
+            Decimal("0.01"), rounding=ROUND_HALF_UP
+        )
+        labor_payout = ZERO
+    elif svc in (ServiceType.YARD_HELP, ServiceType.MOVERS) and inp.needs_equipment:
+        requires_rental = True
+        equipment_rental = to_decimal(rental_cfg.get("tool_rental_rub", 1200))
+
+    direct_cost = (equipment_rental + labor_payout).quantize(
+        Decimal("0.01"), rounding=ROUND_HALF_UP
+    )
+    owner_net_profit = (estimated_total - direct_cost - tax_and_acquiring).quantize(
+        Decimal("0.01"), rounding=ROUND_HALF_UP
+    )
+    owner_margin_pct = (
+        (owner_net_profit * HUNDRED / estimated_total).quantize(
+            Decimal("0.1"), rounding=ROUND_HALF_UP
+        )
+        if estimated_total > ZERO
+        else ZERO
+    )
+
     snapshot = {
         "formula_details": details,
         "work_cost": str(work_cost),
@@ -369,6 +432,15 @@ def calculate_price(
         "advance_amount": str(advance_amount),
         "executor_share_pct": str(share_pct),
         "dispatch_compensation_pct": str(dispatch_comp_pct),
+        "unit_economics": {
+            "requires_equipment_rental": requires_rental,
+            "equipment_rental_rub": str(equipment_rental),
+            "labor_payout_rub": str(labor_payout),
+            "tax_and_acquiring_pct": str(tax_pct),
+            "tax_and_acquiring_rub": str(tax_and_acquiring),
+            "owner_net_profit_rub": str(owner_net_profit),
+            "owner_margin_pct": str(owner_margin_pct),
+        },
     }
 
     return PriceBreakdown(
