@@ -13,12 +13,20 @@ from src.infra.db.models import DataSubjectRequest, User
 
 @pytest.mark.asyncio
 async def test_empty_optional_chat_id_env_vars_parse_as_none(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Регрессия: пустые MAX_DISPATCH_CHAT_ID= и ALERTS_MAX_CHAT_ID= в .env не роняют старт."""
+    """Регрессия: пустые MAX_DISPATCH_CHAT_ID= и пустые LEGAL_* в .env не ломают старт и реквизиты."""
     monkeypatch.setenv("MAX_DISPATCH_CHAT_ID", "")
     monkeypatch.setenv("ALERTS_MAX_CHAT_ID", "   ")
+    monkeypatch.setenv("LEGAL_INN", "")
+    monkeypatch.setenv("LEGAL_OGRNIP", "")
+    monkeypatch.setenv("LEGAL_PHONE", "")
+    monkeypatch.setenv("LEGAL_EMAIL", "")
     cfg = Settings()
     assert cfg.max_dispatch_chat_id is None
     assert cfg.alerts_max_chat_id is None
+    assert cfg.legal_inn == "231521684300"
+    assert cfg.legal_ogrnip == "321344300084915"
+    assert cfg.legal_phone == "+7 (977) 924-02-93"
+    assert cfg.legal_email == "holmatovleonid25@gmail.com"
 
 
 @pytest.mark.asyncio
@@ -47,6 +55,23 @@ async def test_all_legal_pages_and_self_hosted_fonts_zero_google_cdn(client: Any
         assert "fonts.googleapis.com" not in resp.text, f"External Google Fonts found in {path}"
         assert "fonts.gstatic.com" not in resp.text, f"External gstatic found in {path}"
         assert "/static/fonts.css" in resp.text, f"Self-hosted fonts.css missing in {path}"
+
+    # Проверяем, что реальные реквизиты ИП отображаются на ключевых страницах и в API
+    for legal_path in ("/legal/requisites", "/legal/privacy", "/legal/offer", "/legal/consent"):
+        doc = await http.get(legal_path)
+        assert "ИП Холматов Леонид Икрамович" in doc.text
+        assert "231521684300" in doc.text
+        assert "321344300084915" in doc.text
+        assert "+7 (977) 924-02-93" in doc.text
+        assert "holmatovleonid25@gmail.com" in doc.text
+
+    meta = await http.get("/api/v1/legal/public-meta")
+    assert meta.status_code == 200
+    mj = meta.json()
+    assert mj["inn"] == "231521684300"
+    assert mj["ogrnip"] == "321344300084915"
+    assert mj["phone"] == "+7 (977) 924-02-93"
+    assert mj["email"] == "holmatovleonid25@gmail.com"
 
     # Проверяем сами локальные шрифты и OFL-лицензии
     for asset in [

@@ -75,12 +75,11 @@ def _render_legal_page(
 ) -> HTMLResponse:
     brand = _e(cfg.brand_name)
     op_name = _e(cfg.legal_operator_name)
-    inn_text = f"ИНН {_e(cfg.legal_inn)}" if cfg.legal_inn.strip() else "ИНН: заполняется в .env"
-    ogrn_text = (
-        f"ОГРНИП {_e(cfg.legal_ogrnip)}"
-        if cfg.legal_ogrnip.strip()
-        else "ОГРНИП: заполняется в .env"
-    )
+    inn_text = f"ИНН {_e(cfg.legal_inn)}" if cfg.legal_inn.strip() else "ИНН: не указан"
+    ogrn_text = f"ОГРНИП {_e(cfg.legal_ogrnip)}" if cfg.legal_ogrnip.strip() else "ОГРНИП: не указан"
+    phone_display = _e(cfg.legal_phone)
+    phone_digits = "".join(ch for ch in cfg.legal_phone if ch.isdigit())
+    phone_href = f"+{phone_digits}" if phone_digits else ""
     email = _e(cfg.legal_email)
     doc_ver = _e(cfg.legal_doc_version)
     doc_date = _e(cfg.legal_doc_updated_date)
@@ -365,13 +364,13 @@ def _render_legal_page(
       <h1>{_e(title)}</h1>
       <p>{_e(subtitle)}</p>
       <div class="legal-meta-bar">
-        <span>ОПЕРАТОР: {op_name}</span>
+        <span>ОПЕРАТОР: {op_name} ({inn_text}, {ogrn_text})</span>
         <span>·</span>
-        <span>ВЕРСИЯ ДОКУМЕНТА: v{doc_ver} от {doc_date}</span>
+        <span>ТЕЛ: <a href="tel:{phone_href}">{phone_display}</a></span>
         <span>·</span>
-        <span>ЮРИСДИКЦИЯ: РФ</span>
+        <span>E-MAIL: <a href="mailto:{email}">{email}</a></span>
         <span>·</span>
-        <span>КОНТАКТ ПО ПДН: {email}</span>
+        <span>ВЕРСИЯ: v{doc_ver} от {doc_date}</span>
       </div>
     </section>
 
@@ -385,7 +384,7 @@ def _render_legal_page(
 
     <footer class="ice-panel legal-footer-bar">
       <div>
-        <strong>{op_name}</strong> · {inn_text} · {ogrn_text} · 18+
+        <strong>{op_name}</strong> · {inn_text} · {ogrn_text} · <a href="tel:{phone_href}">{phone_display}</a> · <a href="mailto:{email}">{email}</a> · 18+
       </div>
       <div class="legal-footer-links">
         <a href="/legal/privacy">Политика ПДн</a>
@@ -493,8 +492,9 @@ async def legal_privacy(container: AppContainer = Depends(get_container)) -> HTM
         (веб-сайт и чат-бот в российском мессенджере MAX).
       </p>
       <p>
-        <strong>Оператор персональных данных:</strong> {op}.<br />
-        <strong>Контакт для обращений субъектов ПДн:</strong> <a href="mailto:{email}">{email}</a>.<br />
+        <strong>Оператор персональных данных:</strong> {op} (ИНН {_e(cfg.legal_inn)}, ОГРНИП {_e(cfg.legal_ogrnip)}).<br />
+        <strong>Контактный телефон:</strong> {_e(cfg.legal_phone)} ·
+        <strong>E-mail для обращений субъектов ПДн:</strong> <a href="mailto:{email}">{email}</a>.<br />
         <strong>Статус в Реестре операторов ПДн Роскомнадзора (ст. 22 152-ФЗ):</strong> {rkn}.
       </p>
 
@@ -640,7 +640,8 @@ async def legal_consent(container: AppContainer = Depends(get_container)) -> HTM
         Я, субъект персональных данных (достигший 18 лет либо действующий через законного
         представителя), свободно, своей волей и в своём интересе даю конкретное, предметное,
         информированное, сознательное и однозначное согласие Оператору —
-        <strong>{op}</strong> ({addr}, e-mail: <a href="mailto:{email}">{email}</a>) —
+        <strong>{op}</strong> (ИНН {_e(cfg.legal_inn)}, ОГРНИП {_e(cfg.legal_ogrnip)},
+        {addr}, тел. {_e(cfg.legal_phone)}, e-mail: <a href="mailto:{email}">{email}</a>) —
         на обработку моих персональных данных в сервисе <strong>{brand}</strong>.
       </p>
       <h3>1.1. Конкретные цели обработки</h3>
@@ -700,7 +701,9 @@ async def legal_offer(container: AppContainer = Depends(get_container)) -> HTMLR
       <h2>1. Предмет Публичной оферты</h2>
       <p>
         Настоящий документ является официальным предложением (публичной офертой в смысле
-        ст. 437 ГК РФ) <strong>{op}</strong> (далее — «Исполнитель» / «Сервис {brand}») заключить
+        ст. 437 ГК РФ) <strong>{op}</strong> (ИНН {_e(cfg.legal_inn)}, ОГРНИП {_e(cfg.legal_ogrnip)},
+        тел. {_e(cfg.legal_phone)}, e-mail <a href="mailto:{email}">{email}</a>, система
+        налогообложения: {_e(cfg.legal_tax_regime)}; далее — «Исполнитель» / «Сервис {brand}») заключить
         договор возмездного оказания услуг по уборке снега, наледи, сезонной уборке и
         благоустройству придомовых территорий, расчистке крыш, погрузке/разгрузке и смежным
         работам (далее — «Услуги») с любым дееспособным физическим лицом в возрасте от 18 лет
@@ -818,8 +821,9 @@ async def legal_refunds(container: AppContainer = Depends(get_container)) -> HTM
       <h2>3. Как оформить возврат</h2>
       <p>
         Отменить заказ можно прямо в чат-боте MAX кнопкой отмены в карточке заказа. По спорным
-        вопросам и ручным возвратам напишите на <a href="mailto:{email}">{email}</a>, указав
-        номер заказа — обращение регистрируется и рассматривается в срок до 10 календарных дней.
+        вопросам и ручным возвратам напишите на <a href="mailto:{email}">{email}</a> либо
+        позвоните по телефону <strong>{_e(cfg.legal_phone)}</strong>, указав номер заказа —
+        обращение регистрируется и рассматривается в срок до 10 календарных дней.
       </p>
     """
     return _render_legal_page(
@@ -840,8 +844,10 @@ async def legal_executor_offer(container: AppContainer = Depends(get_container))
     body = f"""
       <h2>1. Статус сторон (ГПХ с плательщиками НПД)</h2>
       <p>
-        Настоящая оферта регулирует взаимодействие <strong>{op}</strong> (далее — «Заказчик-агрегатор»,
-        сервис <strong>{brand}</strong>) с физическими лицами, применяющими специальный налоговый
+        Настоящая оферта регулирует взаимодействие <strong>{op}</strong> (ИНН {_e(cfg.legal_inn)},
+        ОГРНИП {_e(cfg.legal_ogrnip)}, тел. {_e(cfg.legal_phone)}, e-mail
+        <a href="mailto:{_e(cfg.legal_email)}">{_e(cfg.legal_email)}</a>; далее —
+        «Заказчик-агрегатор», сервис <strong>{brand}</strong>) с физическими лицами, применяющими специальный налоговый
         режим «Налог на профессиональный доход» (самозанятыми по Федеральному закону от 27.11.2018
         № 422-ФЗ), либо индивидуальными предпринимателями (далее — «Подрядчик»).
       </p>
@@ -949,11 +955,14 @@ async def legal_cookies(container: AppContainer = Depends(get_container)) -> HTM
 @router.get("/legal/requisites", response_class=HTMLResponse, include_in_schema=False)
 async def legal_requisites(container: AppContainer = Depends(get_container)) -> HTMLResponse:
     cfg = container.settings
-    inn = _display_or_pending(cfg.legal_inn, "указывается в .env (LEGAL_INN) до запуска оплат")
-    ogrnip = _display_or_pending(
-        cfg.legal_ogrnip, "указывается в .env (LEGAL_OGRNIP) до запуска оплат"
+    inn = _display_or_pending(cfg.legal_inn, "указывается в .env (LEGAL_INN)")
+    ogrnip = _display_or_pending(cfg.legal_ogrnip, "указывается в .env (LEGAL_OGRNIP)")
+    phone_digits = "".join(ch for ch in cfg.legal_phone if ch.isdigit())
+    phone_html = (
+        f'<a href="tel:+{phone_digits}">{_e(cfg.legal_phone)}</a>'
+        if cfg.legal_phone.strip()
+        else _display_or_pending("", "указывается в .env (LEGAL_PHONE)")
     )
-    phone = _display_or_pending(cfg.legal_phone, "указывается в .env (LEGAL_PHONE)")
     rkn = _display_or_pending(
         cfg.legal_rkn_reg_no,
         "уведомление подаётся на pd.rkn.gov.ru до старта сбора заявок (LEGAL_RKN_REG_NO)",
@@ -964,12 +973,15 @@ async def legal_requisites(container: AppContainer = Depends(get_container)) -> 
         <table class="legal-table">
           <tbody>
             <tr><th>Коммерческое наименование</th><td><strong>{_e(cfg.brand_name)}</strong></td></tr>
-            <tr><th>Оператор / Исполнитель</th><td><strong>{_e(cfg.legal_operator_name)}</strong></td></tr>
+            <tr><th>Оператор / Исполнитель</th><td><strong>{_e(cfg.legal_operator_name)}</strong> (Индивидуальный предприниматель)</td></tr>
             <tr><th>ИНН</th><td class="mono">{inn}</td></tr>
-            <tr><th>ОГРНИП / ОГРН</th><td class="mono">{ogrnip}</td></tr>
-            <tr><th>Адрес / регион деятельности</th><td>{_e(cfg.legal_address)}</td></tr>
-            <tr><th>E-mail по вопросам ПДн и возвратов</th><td class="mono"><a href="mailto:{_e(cfg.legal_email)}">{_e(cfg.legal_email)}</a></td></tr>
-            <tr><th>Контактный телефон</th><td class="mono">{phone}</td></tr>
+            <tr><th>ОГРНИП</th><td class="mono">{ogrnip}</td></tr>
+            <tr><th>Дата государственной регистрации</th><td class="mono">{_e(cfg.legal_registration_date)}</td></tr>
+            <tr><th>ОКПО / ОКТМО</th><td class="mono">{_e(cfg.legal_okpo)} / {_e(cfg.legal_oktmo)}</td></tr>
+            <tr><th>Специальный налоговый режим</th><td><strong>{_e(cfg.legal_tax_regime)}</strong></td></tr>
+            <tr><th>Регион регистрации и оказания услуг</th><td>{_e(cfg.legal_address)}</td></tr>
+            <tr><th>Контактный телефон</th><td class="mono">{phone_html}</td></tr>
+            <tr><th>E-mail по вопросам ПДн, претензий и возвратов</th><td class="mono"><a href="mailto:{_e(cfg.legal_email)}">{_e(cfg.legal_email)}</a></td></tr>
           </tbody>
         </table>
       </div>
