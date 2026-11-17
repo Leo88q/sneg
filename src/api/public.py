@@ -254,7 +254,7 @@ async def get_public_catalog(
     hourly_cfg = tcfg.get("hourly", {})
     roof_cfg = tcfg.get("roof_and_reagents", {})
     adv_pcts = tcfg.get("advance_pct_by_service", {})
-    min_order = int(to_decimal(tcfg.get("min_order_total_rub", 1500)))
+    min_order = int(to_decimal(tcfg.get("min_order_total_rub", 2000)))
 
     services = [
         {
@@ -262,9 +262,9 @@ async def get_public_catalog(
             "title": SERVICE_LABELS[ServiceType.SNOW_YARD],
             "short_title": "Снег во дворе",
             "category": "Зима · участки",
-            "price_from_label": f"от {snow_methods.get('manual', {}).get('rate_per_m2', 25)} ₽/м²",
+            "price_from_label": f"от {snow_methods.get('manual', {}).get('rate_per_m2', 40)} ₽/м²",
             "min_price_rub": int(
-                max(min_order, int(snow_methods.get("manual", {}).get("min_work_price", 1500)))
+                max(min_order, int(snow_methods.get("manual", {}).get("min_work_price", 2500)))
             ),
             "advance_pct": int(adv_pcts.get("snow_yard", 30)),
             "summary": "Дорожки, парковка, отмостка и площадка перед домом. Вручную или техникой, по желанию с вывозом снега.",
@@ -274,9 +274,9 @@ async def get_public_catalog(
             "title": SERVICE_LABELS[ServiceType.SNOW_ROAD],
             "short_title": "Дорога и проезд",
             "category": "Зима · СНТ и проезды",
-            "price_from_label": f"от {snow_methods.get('tractor', {}).get('rate_per_m2', 15)} ₽/м²",
+            "price_from_label": f"от {snow_methods.get('tractor', {}).get('rate_per_m2', 20)} ₽/м²",
             "min_price_rub": int(
-                snow_methods.get("snowblower_or_miniloader", {}).get("min_work_price", 2500)
+                snow_methods.get("snowblower_or_miniloader", {}).get("min_work_price", 3000)
             ),
             "advance_pct": int(adv_pcts.get("snow_road", 30)),
             "summary": "Подъезд к дому, улица в СНТ, заезд в ворота. Автоподбор мини-погрузчика или трактора под ширину проезда.",
@@ -297,7 +297,7 @@ async def get_public_catalog(
             "short_title": "Расчистка крыши",
             "category": "Высотные работы",
             "price_from_label": f"от {int(roof_cfg.get('roof_rate_per_m2', 90))} ₽/м²",
-            "min_price_rub": int(roof_cfg.get("roof_min_price", 5000)),
+            "min_price_rub": int(roof_cfg.get("roof_min_price", 6000)),
             "advance_pct": int(adv_pcts.get("roof_cleaning", 40)),
             "summary": "Сброс снега, наледи и сосулек. Выезжают только допущенные исполнители со страховкой.",
         },
@@ -306,8 +306,8 @@ async def get_public_catalog(
             "title": SERVICE_LABELS[ServiceType.REAGENTS],
             "short_title": "Посыпка реагентами",
             "category": "Антигололёд",
-            "price_from_label": f"от {int(roof_cfg.get('reagents_rate_per_m2', 15))} ₽/м²",
-            "min_price_rub": int(roof_cfg.get("reagents_min_price", 800)),
+            "price_from_label": f"от {int(roof_cfg.get('reagents_rate_per_m2', 20))} ₽/м²",
+            "min_price_rub": int(roof_cfg.get("reagents_min_price", 1000)),
             "advance_pct": int(adv_pcts.get("reagents", 50)),
             "summary": "Противогололёдная обработка ступеней, дорожек и въезда. В паре с уборкой — без доплаты за выезд.",
         },
@@ -317,8 +317,13 @@ async def get_public_catalog(
             "short_title": "Помощь по двору",
             "category": "Всесезонно",
             "price_from_label": f"от {int(hourly_cfg.get('yard_help_rate_per_hour', 700))} ₽/ч",
-            "min_price_rub": int(hourly_cfg.get("yard_help_rate_per_hour", 700))
-            * int(hourly_cfg.get("min_hours", 2)),
+            "min_price_rub": int(
+                max(
+                    min_order,
+                    int(hourly_cfg.get("yard_help_rate_per_hour", 700))
+                    * int(hourly_cfg.get("min_hours", 2)),
+                )
+            ),
             "advance_pct": int(adv_pcts.get("yard_help", 30)),
             "summary": "Уборка территории, перенос дров, наведение порядка на участке в любое время года. От 2 часов.",
         },
@@ -327,9 +332,14 @@ async def get_public_catalog(
             "title": SERVICE_LABELS[ServiceType.MOVERS],
             "short_title": "Грузчики",
             "category": "Всесезонно",
-            "price_from_label": f"от {int(hourly_cfg.get('movers_rate_per_hour', 850))} ₽/ч",
-            "min_price_rub": int(hourly_cfg.get("movers_rate_per_hour", 850))
-            * int(hourly_cfg.get("min_hours", 2)),
+            "price_from_label": f"от {int(hourly_cfg.get('movers_rate_per_hour', 750))} ₽/ч",
+            "min_price_rub": int(
+                max(
+                    min_order,
+                    int(hourly_cfg.get("movers_rate_per_hour", 750))
+                    * int(hourly_cfg.get("min_hours", 2)),
+                )
+            ),
             "advance_pct": int(adv_pcts.get("movers", 30)),
             "summary": "Погрузка, разгрузка, переезд дома или дачи. От 1 до 10 исполнителей, минимум 2 часа.",
         },

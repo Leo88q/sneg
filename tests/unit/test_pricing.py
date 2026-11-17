@@ -31,8 +31,8 @@ from src.domain.pricing.calculator import (
 from src.domain.pricing.defaults import DEFAULT_GEO_ZONES, DEFAULT_TARIFF_CONFIG
 
 
-def test_tz_b7_2_example_1_snow_yard() -> None:
-    """TZ Section B7.2 Example 1: 120 m², 10-30cm, snowblower, within_3h, Malakhovka."""
+def test_market_2026_snow_yard_snowblower_example() -> None:
+    """МО 2026: 120 м², 10–30 см (×1.5), снегоуборщик (30 ₽/м²), за 3 ч (×1.3), Малаховка (500 ₽)."""
     day_utc = datetime(2026, 1, 15, 9, 0, tzinfo=UTC)  # 12:00 MSK (daytime)
     res = calculate_price(
         PriceCalculationInput(
@@ -46,10 +46,67 @@ def test_tz_b7_2_example_1_snow_yard() -> None:
         DEFAULT_TARIFF_CONFIG,
         now_utc=day_utc,
     )
-    assert res.estimated_total == Decimal("5200.00")
-    assert res.advance_amount == Decimal("1550.00")
-    assert res.remainder_amount == Decimal("3650.00")
+    # 120 * 30 * 1.5 * 1.3 = 7020 + 500 = 7520 -> round50 = 7500
+    assert res.estimated_total == Decimal("7500.00")
+    assert res.advance_amount == Decimal("2250.00")
+    assert res.remainder_amount == Decimal("5250.00")
     assert res.is_night is False
+
+
+def test_market_2026_snow_manual_min_and_snow_removal() -> None:
+    """МО 2026: ручной минимум 2 500 ₽ и вывоз снега 600 ₽/м³ (мин. 7 500 ₽)."""
+    day_utc = datetime(2026, 1, 15, 9, 0, tzinfo=UTC)
+
+    # 50 м² до 10 см вручную -> min_work_price 2500 + 500 выезд = 3000
+    res_small = calculate_price(
+        PriceCalculationInput(
+            service_type=ServiceType.SNOW_YARD,
+            dispatch_fee=Decimal("500.00"),
+            area_m2=Decimal("50"),
+            depth_bucket=DepthBucket.UP_TO_10,
+            cleaning_method=CleaningMethod.MANUAL,
+            urgency=UrgencyLevel.TODAY,
+        ),
+        DEFAULT_TARIFF_CONFIG,
+        now_utc=day_utc,
+    )
+    assert res_small.work_cost == Decimal("2500.00")
+    assert res_small.estimated_total == Decimal("3000.00")
+    assert res_small.advance_amount == Decimal("900.00")
+
+    # 50 м² 10-30 см с вывозом (10 м³ -> срабатывает мин. вывоза 7500 ₽)
+    res_rem_min = calculate_price(
+        PriceCalculationInput(
+            service_type=ServiceType.SNOW_YARD,
+            dispatch_fee=Decimal("500.00"),
+            area_m2=Decimal("50"),
+            depth_bucket=DepthBucket.FROM_10_TO_30,
+            cleaning_method=CleaningMethod.MANUAL,
+            urgency=UrgencyLevel.TODAY,
+            snow_removal=True,
+        ),
+        DEFAULT_TARIFF_CONFIG,
+        now_utc=day_utc,
+    )
+    assert res_rem_min.extras_cost == Decimal("7500.00")
+    assert res_rem_min.estimated_total == Decimal("11000.00")
+
+    # 100 м² 10-30 см с вывозом (20 м³ * 600 = 12000 ₽) + работа 4500 + выезд 500 = 17000 ₽
+    res_rem_vol = calculate_price(
+        PriceCalculationInput(
+            service_type=ServiceType.SNOW_YARD,
+            dispatch_fee=Decimal("500.00"),
+            area_m2=Decimal("100"),
+            depth_bucket=DepthBucket.FROM_10_TO_30,
+            cleaning_method=CleaningMethod.SNOWBLOWER_OR_MINILOADER,
+            urgency=UrgencyLevel.TODAY,
+            snow_removal=True,
+        ),
+        DEFAULT_TARIFF_CONFIG,
+        now_utc=day_utc,
+    )
+    assert res_rem_vol.extras_cost == Decimal("12000.00")
+    assert res_rem_vol.estimated_total == Decimal("17000.00")
 
 
 def test_tz_b7_2_example_2_car_rescue() -> None:
@@ -93,8 +150,8 @@ def test_night_msk_boosts_urgent_within_3h_to_1_5() -> None:
         now_utc=night_utc,
     )
     assert res.is_night is True
-    # 100 * 25 * 1.0 * 1.5 = 3750 + 500 = 4250
-    assert res.estimated_total == Decimal("4250.00")
+    # 100 * 40 * 1.0 * 1.5 = 6000 + 500 = 6500
+    assert res.estimated_total == Decimal("6500.00")
 
 
 def test_hourly_services_and_group_discount() -> None:
@@ -110,8 +167,22 @@ def test_hourly_services_and_group_discount() -> None:
         DEFAULT_TARIFF_CONFIG,
         now_utc=day_utc,
     )
-    # 850 * 2 * 2 = 3400 + 2*2*150 (600) + 500 (dispatch) = 4500
-    assert res_movers.estimated_total == Decimal("4500.00")
+    # 750 * 2 * 2 = 3000 + 2*2*200 (800) + 500 (dispatch) = 4300
+    assert res_movers.estimated_total == Decimal("4300.00")
+
+    # yard_help 1 чел × 2 ч = 1400 + 500 = 1900 -> min_order_total = 2000, min_advance = 700
+    res_yard_min = calculate_price(
+        PriceCalculationInput(
+            service_type=ServiceType.YARD_HELP,
+            dispatch_fee=Decimal("500.00"),
+            workers_count=1,
+            hours=2,
+        ),
+        DEFAULT_TARIFF_CONFIG,
+        now_utc=day_utc,
+    )
+    assert res_yard_min.estimated_total == Decimal("2000.00")
+    assert res_yard_min.advance_amount == Decimal("700.00")
 
     disc_pct = resolve_group_discount_pct(2, DEFAULT_TARIFF_CONFIG)
     assert disc_pct == Decimal("10.00")
@@ -128,12 +199,23 @@ def test_hourly_services_and_group_discount() -> None:
         DEFAULT_TARIFF_CONFIG,
         now_utc=day_utc,
     )
-    # base 2500 + 500 = 3000; 10% = 300 -> 2700
-    assert res_group.group_discount_amount == Decimal("300.00")
-    assert res_group.estimated_total == Decimal("2700.00")
+    # base 4000 + 500 = 4500; 10% = 450 -> 4050
+    assert res_group.group_discount_amount == Decimal("450.00")
+    assert res_group.estimated_total == Decimal("4050.00")
 
 
 def test_roof_cleaning_and_reagents_pricing() -> None:
+    res_roof_min = calculate_price(
+        PriceCalculationInput(
+            service_type=ServiceType.ROOF_CLEANING,
+            dispatch_fee=Decimal("500.00"),
+            area_m2=Decimal("50"),
+        ),
+        DEFAULT_TARIFF_CONFIG,
+    )
+    # 50 * 90 = 4500 < min 6000 -> 6000 + 500 = 6500
+    assert res_roof_min.estimated_total == Decimal("6500.00")
+
     res_roof = calculate_price(
         PriceCalculationInput(
             service_type=ServiceType.ROOF_CLEANING,
@@ -154,9 +236,21 @@ def test_roof_cleaning_and_reagents_pricing() -> None:
         ),
         DEFAULT_TARIFF_CONFIG,
     )
-    # addon -> dispatch_fee = 0; 100 * 15 = 1500
+    # addon -> dispatch_fee = 0; 100 * 20 = 2000
     assert res_reag.dispatch_fee == Decimal("0.00")
-    assert res_reag.estimated_total == Decimal("1500.00")
+    assert res_reag.estimated_total == Decimal("2000.00")
+
+    res_reag_min = calculate_price(
+        PriceCalculationInput(
+            service_type=ServiceType.REAGENTS,
+            dispatch_fee=Decimal("500.00"),
+            area_m2=Decimal("30"),
+            as_addon=True,
+        ),
+        DEFAULT_TARIFF_CONFIG,
+    )
+    # 30 * 20 = 600 < min 1000 -> 1000
+    assert res_reag_min.estimated_total == Decimal("1000.00")
 
 
 def test_cancellation_refund_rules() -> None:
@@ -238,3 +332,69 @@ def test_order_state_machine_enforces_valid_transitions() -> None:
     assert not can_transition(OrderStatus.SEARCHING_EXECUTOR, OrderStatus.COMPLETED)
     with pytest.raises(InvalidStateTransitionError):
         assert_order_transition(OrderStatus.COMPLETED, OrderStatus.IN_PROGRESS)
+
+
+def test_alembic_0003_upgrades_legacy_v1_tariff_to_market_2026() -> None:
+    """Миграция 0003 безопасно переводит живую БД со старым v1 (25 ₽/м²) на активный v2 МО 2026."""
+    import importlib.util
+    import json
+    import uuid
+    from pathlib import Path
+
+    import sqlalchemy as sa
+    from alembic.migration import MigrationContext
+    from alembic.operations import Operations
+
+    from src.infra.db.models import Base
+
+    mig_path = Path("migrations/versions/0003_market_2026_tariffs.py")
+    spec = importlib.util.spec_from_file_location("mig_0003", mig_path)
+    assert spec is not None and spec.loader is not None
+    mig = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mig)
+
+    engine = sa.create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+
+    old_v1 = {
+        "min_order_total_rub": 1500,
+        "snow": {"methods": {"manual": {"rate_per_m2": 25, "min_work_price": 1500}}},
+    }
+    with engine.begin() as conn:
+        conn.execute(
+            sa.text(
+                "INSERT INTO tariff_configs (id, version, is_active, config_json, comment, created_at) "
+                "VALUES (:id, 1, 1, :cfg, 'old v1', :ts)"
+            ),
+            {"id": uuid.uuid4().hex, "cfg": json.dumps(old_v1), "ts": datetime.now(UTC).isoformat()},
+        )
+
+    # Применяем upgrade() через Alembic op context
+    with engine.begin() as conn:
+        ctx = MigrationContext.configure(conn)
+        with Operations.context(ctx):
+            mig.upgrade()
+
+    with engine.connect() as conn:
+        rows = conn.execute(
+            sa.text("SELECT version, is_active, config_json FROM tariff_configs ORDER BY version ASC")
+        ).fetchall()
+        assert len(rows) == 2
+        assert rows[0][0] == 1 and not rows[0][1]
+        assert rows[1][0] == 2 and bool(rows[1][1])
+        v2_cfg = json.loads(rows[1][2]) if isinstance(rows[1][2], str) else rows[1][2]
+        assert v2_cfg["min_order_total_rub"] == 2000
+        assert v2_cfg["snow"]["methods"]["manual"]["rate_per_m2"] == 40
+        assert v2_cfg["snow"]["snow_removal"]["min_removal_price"] == 7500
+        assert v2_cfg["hourly"]["movers_rate_per_hour"] == 750
+
+    # Повторный вызов upgrade() — безопасный no-op
+    with engine.begin() as conn:
+        ctx = MigrationContext.configure(conn)
+        with Operations.context(ctx):
+            mig.upgrade()
+
+    with engine.connect() as conn:
+        count = conn.execute(sa.text("SELECT COUNT(1) FROM tariff_configs")).scalar()
+        assert count == 2
+
