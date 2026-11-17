@@ -160,6 +160,181 @@ class OrderOrchestrator:
         ).scalar_one_or_none()
         return chat.chat_id if chat else None
 
+    async def get_alerts_chat_ids(self, session: AsyncSession) -> list[int]:
+        ids: list[int] = []
+        if self.settings.max_alerts_chat_id:
+            ids.append(self.settings.max_alerts_chat_id)
+        chats = (
+            await session.execute(
+                select(BotChat).where(
+                    BotChat.chat_purpose == ChatPurpose.FOREMAN_ALERTS.value,
+                    BotChat.is_active.is_(True),
+                )
+            )
+        ).scalars().all()
+        for ch in chats:
+            if ch.chat_id not in ids:
+                ids.append(ch.chat_id)
+        return ids
+
+    async def _notify_alerts_new_order(self, order_id: uuid.UUID) -> None:
+        """Отправляет владельцу/диспетчеру карточку новой заявки в привязанный чат MAX."""
+        async with self.session_factory() as session:
+            alert_chats = await self.get_alerts_chat_ids(session)
+            if not alert_chats:
+                return
+            order = await session.get(Order, order_id)
+            if order is None:
+                return
+            client = await session.get(User, order.client_id)
+            zone = await session.get(GeoZone, order.geo_zone_id) if order.geo_zone_id else None
+
+            svc_label = SERVICE_LABELS.get(ServiceType(order.service_type), order.service_type)
+            method_str = ""
+            if order.cleaning_method:
+                try:
+                    method_str = METHOD_LABELS[CleaningMethod(order.cleaning_method)]
+                except ValueError:
+                    method_str = order.cleaning_method
+
+            source_label = "Сайт chistodvor.ru" if (client and client.max_user_id <= 0) else "MAX-бот"
+            client_name = client.display_name if client else "Клиент"
+            phone_line = (
+                f"📞 Телефон: {client.shared_contact_phone}\n"
+                if client and client.shared_contact_phone
+                else ""
+            )
+            zone_name = zone.name if zone else "—"
+            comment_line = f"💬 Комментарий: {order.client_comment}\n" if order.client_comment else ""
+
+            ue = (order.pricing_snapshot or {}).get("unit_economics") or {}
+            ue_lines = ""
+            if ue:
+                rental = to_decimal(ue.get("equipment_rental_rub", 0))
+                profit = to_decimal(ue.get("owner_net_profit_rub", 0))
+                margin = ue.get("owner_margin_pct", 0)
+                if rental > ZERO:
+                    ue_lines += f"🚜 Бюджет аренды техники: **{rental:.0f} ₽**\n"
+                ue_lines += f"📈 Прогноз чистой прибыли ИП: **+{profit:.0f} ₽ ({margin}%)**\n"
+
+            base_url = (self.settings.public_base_url or "https://chistodvor.ru").rstrip("/")
+            text = (
+                f"🔔 **НОВАЯ ЗАЯВКА #{order.public_number}** ({source_label})\n"
+                f"• Услуга: **{svc_label}**"
+                + (f" ({method_str})" if method_str else "")
+                + "\n"
+                f"• Зона: **{zone_name}**\n"
+                f"• Адрес: **{order.address_text}**\n"
+                f"• Клиент: {client_name}\n"
+                f"{phone_line}"
+                f"{comment_line}"
+                f"• Сумма: **{order.final_total:.0f} ₽** (аванс **{order.advance_amount:.0f} ₽**)\n"
+                f"{ue_lines}\n"
+                f"🔗 Админка: {base_url}/admin\n"
+                "Нажмите кнопку ниже, чтобы сразу отправить карточку рабочим в чат бригады:"
+            )
+            kb = InlineKeyboard(
+                rows=[
+                    [
+                        InlineButton(
+                            type="callback",
+                            text="🚀 Отправить в чат рабочих",
+                            payload=f"disp:publish:{order.id}",
+                        )
+                    ],
+                    [
+                        InlineButton(
+                            type="callback",
+                            text="❌ Отменить заявку",
+                            payload=f"disp:cancel:{order.id}",
+                        )
+                    ],
+                ]
+            )
+            msg = OutgoingMessage(text=text, keyboard=kb)
+
+        for chat_id in alert_chats:
+            try:
+                await self.messenger.send_message(MessageTarget(chat_id=chat_id), msg)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "Не удалось отправить уведомление о заявке #%s в чат %s: %s",
+                    order_id,
+                    chat_id,
+                    exc,
+                )
+
+    async def publish_order_to_dispatch(
+        self,
+        *,
+        order_id: uuid.UUID,
+        actor_label: str,
+        actor_user_id: uuid.UUID | None = None,
+        actor_admin_id: uuid.UUID | None = None,
+        mark_advance_paid: bool = False,
+    ) -> Order:
+        """Переводит заявку в поиск исполнителя и публикует карточку в чат рабочих (бригады)."""
+        client_max_id: int | None = None
+        async with self.session_factory() as session:
+            order = await session.get(Order, order_id)
+            if order is None:
+                raise NotFoundError("Заказ не найден")
+
+            dispatch_chat_id = order.dispatch_chat_id or await self.get_dispatch_chat_id(session)
+            if dispatch_chat_id is None:
+                raise ValidationAppError(
+                    "Чат рабочих (биржа) ещё не привязан: добавьте бота в группу бригады "
+                    "и напишите там /bind_dispatch_chat"
+                )
+
+            if order.status not in (
+                OrderStatus.AWAITING_ADVANCE.value,
+                OrderStatus.SEARCHING_EXECUTOR.value,
+                OrderStatus.PARTIALLY_ASSIGNED.value,
+            ):
+                raise InvalidStateTransitionError(
+                    f"Нельзя отправить в чат рабочих заказ в статусе «{STATUS_LABELS.get(OrderStatus(order.status), order.status)}»"
+                )
+
+            prev_status = order.status
+            if order.status == OrderStatus.AWAITING_ADVANCE.value:
+                order.status = OrderStatus.SEARCHING_EXECUTOR.value
+                order.dispatch_wave = 1
+                if mark_advance_paid and order.paid_amount < order.advance_amount:
+                    order.paid_amount = order.advance_amount
+                    order.payment_status = OrderPaymentStatus.ADVANCE_PAID.value
+                await self._log_status(
+                    session,
+                    order=order,
+                    from_status=prev_status,
+                    to_status=order.status,
+                    actor_user_id=actor_user_id,
+                    actor_admin_id=actor_admin_id,
+                    reason=f"Отправлено в чат рабочих ({actor_label})",
+                )
+
+            client = await session.get(User, order.client_id)
+            if client and client.max_user_id > 0 and prev_status == OrderStatus.AWAITING_ADVANCE.value:
+                client_max_id = client.max_user_id
+
+            await session.commit()
+            await session.refresh(order)
+
+        await self._publish_or_update_dispatch_card(order_id, show_take_button=True)
+
+        if client_max_id is not None:
+            await self._notify_max_user(
+                client_max_id,
+                OutgoingMessage(
+                    text=(
+                        f"✅ **Заказ #{order.public_number} подтверждён диспетчером и передан бригаде!**\n"
+                        "Как только исполнитель возьмёт заявку, мы сразу сообщим вам."
+                    )
+                ),
+            )
+
+        return order
+
     async def _log_status(
         self,
         session: AsyncSession,
@@ -448,7 +623,9 @@ class OrderOrchestrator:
             await session.commit()
             await session.refresh(order)
             await session.refresh(payment)
-            return order, payment
+
+        await self._notify_alerts_new_order(order.id)
+        return order, payment
 
     async def _update_order_group_after_advance(
         self, session: AsyncSession, order: Order

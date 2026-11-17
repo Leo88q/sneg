@@ -631,6 +631,44 @@ async def get_order_detail(
     }
 
 
+@router.post("/orders/{order_id}/dispatch")
+async def admin_dispatch_order(
+    order_id: uuid.UUID,
+    request: Request,
+    mark_advance_paid: bool = False,
+    admin: AdminAccount = Depends(
+        require_roles(AdminRole.FOREMAN, AdminRole.ADMIN, AdminRole.OWNER)
+    ),
+    container: AppContainer = Depends(get_container),
+) -> dict[str, Any]:
+    order = await container.orchestrator.publish_order_to_dispatch(
+        order_id=order_id,
+        actor_label=f"Админка ({admin.email})",
+        actor_admin_id=admin.id,
+        mark_advance_paid=mark_advance_paid,
+    )
+    async with container.session_factory() as session:
+        await write_audit(
+            session,
+            admin=admin,
+            action="order.dispatch_to_chat",
+            entity_type="order",
+            entity_id=str(order_id),
+            diff={
+                "status": order.status,
+                "dispatch_chat_id": order.dispatch_chat_id,
+                "mark_advance_paid": mark_advance_paid,
+            },
+            ip=request.client.host if request.client else None,
+        )
+        await session.commit()
+    return {
+        "order_status": order.status,
+        "dispatch_chat_id": order.dispatch_chat_id,
+        "dispatch_message_id": order.dispatch_message_id,
+    }
+
+
 @router.post("/orders/{order_id}/assign")
 async def admin_assign_order(
     order_id: uuid.UUID,

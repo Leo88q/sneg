@@ -331,3 +331,155 @@ async def test_quick_order_without_client_name_succeeds(client: Any) -> None:
         ).scalar_one()
         assert user.first_name == "Клиент"
 
+
+@pytest.mark.asyncio
+async def test_owner_alerts_and_manual_dispatch_to_workers(client: Any) -> None:
+    """Полный цикл маршрутизации: сайт -> MAX уведомление владельцу -> отправка в чат рабочих."""
+    from src.core.enums import ChatPurpose
+    from src.infra.db.models import BotChat, Order, SimulatorMessage
+
+    http, container = client
+
+    owner_max_uid = 777001
+    owner_chat_id = 777001
+    brigade_chat_id = -999888
+
+    # 1. Неверный пароль не привязывает чат уведомлений
+    await container.bot_router.handle_update(
+        {
+            "update_id": "bind-bad-1",
+            "update_type": "message_created",
+            "message": {
+                "sender": {"user_id": owner_max_uid, "first_name": "Леонид"},
+                "recipient": {"chat_id": owner_chat_id, "chat_type": "dialog"},
+                "body": {"text": "/bind_alerts_chat wrongpass"},
+            },
+        }
+    )
+    async with container.session_factory() as session:
+        assert await session.get(BotChat, owner_chat_id) is None
+
+    # 2. Верный пароль владельца привязывает личный чат к уведомлениям и даёт роль owner
+    await container.bot_router.handle_update(
+        {
+            "update_id": "bind-ok-1",
+            "update_type": "message_created",
+            "message": {
+                "sender": {"user_id": owner_max_uid, "first_name": "Леонид"},
+                "recipient": {"chat_id": owner_chat_id, "chat_type": "dialog"},
+                "body": {"text": "/bind_alerts_chat admin12345"},
+            },
+        }
+    )
+    async with container.session_factory() as session:
+        alert_chat = await session.get(BotChat, owner_chat_id)
+        assert alert_chat is not None
+        assert alert_chat.chat_purpose == ChatPurpose.FOREMAN_ALERTS.value
+
+    # 3. Привязываем групповой чат рабочих через /bind_dispatch_chat
+    await container.bot_router.handle_update(
+        {
+            "update_id": "bind-disp-1",
+            "update_type": "message_created",
+            "message": {
+                "sender": {"user_id": owner_max_uid, "first_name": "Леонид"},
+                "recipient": {"chat_id": brigade_chat_id, "chat_type": "chat"},
+                "body": {"text": "/bind_dispatch_chat"},
+            },
+        }
+    )
+
+    # 4. Клиент оформляет заказ на сайте -> владельцу мгновенно приходит уведомление в MAX
+    resp = await http.post(
+        "/api/v1/public/orders",
+        json={
+            "service_type": "snow_yard",
+            "zone_code": "malakhovka",
+            "area_m2": 120,
+            "address_text": "ул. Красковская, д. 7",
+            "client_name": "Иван",
+            "client_phone": "+7 (999) 123-45-67",
+            "consent_pdn": True,
+            "consent_offer": True,
+        },
+    )
+    assert resp.status_code == 201, resp.text
+    order_id = resp.json()["order_id"]
+    pub_num = resp.json()["public_number"]
+
+    async with container.session_factory() as session:
+        alert_msgs = list(
+            (
+                await session.execute(
+                    select(SimulatorMessage).where(SimulatorMessage.chat_id == owner_chat_id)
+                )
+            )
+            .scalars()
+            .all()
+        )
+    alert_card = next((m for m in alert_msgs if f"НОВАЯ ЗАЯВКА #{pub_num}" in m.text), None)
+    assert alert_card is not None
+    assert "+79991234567" in alert_card.text
+    alert_btns = [
+        b
+        for att in (alert_card.attachments_json or [])
+        if att.get("type") == "inline_keyboard"
+        for row in att.get("payload", {}).get("buttons", [])
+        for b in row
+    ]
+    assert any(b.get("payload") == f"disp:publish:{order_id}" for b in alert_btns)
+
+    # 5. Владелец нажимает кнопку "Отправить в чат рабочих" в MAX -> карточка уходит бригаде
+    await container.bot_router.handle_update(
+        {
+            "update_id": "disp-pub-1",
+            "update_type": "message_callback",
+            "callback": {
+                "callback_id": "cb-disp-1",
+                "payload": f"disp:publish:{order_id}",
+                "user": {"user_id": owner_max_uid, "first_name": "Леонид"},
+            },
+            "message": {"recipient": {"chat_id": owner_chat_id, "chat_type": "dialog"}},
+        }
+    )
+
+    async with container.session_factory() as session:
+        order = await session.get(Order, uuid.UUID(order_id))
+        assert order is not None
+        assert order.status == "searching_executor"
+        assert order.dispatch_chat_id is not None
+        worker_msgs = list(
+            (
+                await session.execute(
+                    select(SimulatorMessage).where(
+                        SimulatorMessage.chat_id == order.dispatch_chat_id
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+    worker_card = next((m for m in worker_msgs if f"#{pub_num}" in m.text), None)
+    assert worker_card is not None
+    # Номер телефона клиента строго скрыт в общем чате рабочих!
+    assert "+79991234567" not in worker_card.text
+    worker_btns = [
+        b
+        for att in (worker_card.attachments_json or [])
+        if att.get("type") == "inline_keyboard"
+        for row in att.get("payload", {}).get("buttons", [])
+        for b in row
+    ]
+    assert any(b.get("payload") == f"ord:take:{order_id}" for b in worker_btns)
+
+    # 6. Повторная отправка / отправка из веб-админки POST /api/v1/admin/orders/{id}/dispatch тоже работает
+    login = await http.post(
+        "/api/v1/admin/auth/login",
+        json={"email": "owner@sneg.local", "password": "admin12345"},
+    )
+    assert login.status_code == 200
+    disp_resp = await http.post(f"/api/v1/admin/orders/{order_id}/dispatch")
+    assert disp_resp.status_code == 200
+    assert disp_resp.json()["order_status"] == "searching_executor"
+
+

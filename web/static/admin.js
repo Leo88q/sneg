@@ -345,6 +345,11 @@ async function openOrder(orderId) {
     <div class="ice-panel" style="margin-bottom:14px;padding:14px">
       <div class="field-label" style="margin-bottom:10px">ДИСПЕТЧЕРСКИЕ КОМАНДЫ</div>
       <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+        ${
+          ['awaiting_advance', 'searching_executor', 'partially_assigned'].includes(o.status)
+            ? `<button class="btn btn-success btn-sm" onclick="dispatchToWorkers('${o.id}')">🚀 Отправить в чат рабочих</button>`
+            : ''
+        }
         <select id="assign-exec-sel" style="max-width:250px">${execOptions}</select>
         <button class="btn btn-primary btn-sm" onclick="assignExec('${o.id}')">Назначить исполнителя</button>
         <button class="btn btn-warn btn-sm" onclick="proposeAdj('${o.id}', '${o.final_total}')">Корректировка цены &gt;20%</button>
@@ -387,6 +392,16 @@ async function openOrder(orderId) {
 
 function closeModal() {
   document.getElementById('order-modal').classList.remove('open');
+}
+
+async function dispatchToWorkers(orderId) {
+  try {
+    await api(`/api/v1/admin/orders/${orderId}/dispatch`, { method: 'POST' });
+    toast('Карточка заказа отправлена рабочим в чат бригады MAX!');
+    await openOrder(orderId);
+  } catch (e) {
+    toast('Ошибка: ' + e.message);
+  }
 }
 
 async function assignExec(orderId) {
@@ -1012,19 +1027,27 @@ async function renderAudit(root) {
     </div>
 
     <div class="ice-panel table-wrap" style="margin-bottom:16px">
-      <div class="field-label" style="margin-bottom:10px">ЗАРЕГИСТРИРОВАННЫЕ ЧАТЫ БОТА (BOT_ADDED)</div>
+      <div class="field-label" style="margin-bottom:10px">ПРИВЯЗАННЫЕ ЧАТЫ MAX (ЗАЯВКИ И БРИГАДА)</div>
       <table>
-        <thead><tr><th>chat_id</th><th>Название</th><th>Назначение</th><th>Права админа</th></tr></thead>
+        <thead><tr><th>chat_id</th><th>Название</th><th>Роль чата</th><th>Права админа</th></tr></thead>
         <tbody>${chats
           .map(
-            (c) => `<tr>
+            (c) => {
+              const roleMap = {
+                dispatch_pool: ['Чат рабочих (биржа)', 'pill-green'],
+                foreman_alerts: ['Диспетчерская (уведомления)', 'pill-blue'],
+                other: ['Прочий чат', 'pill-warn'],
+              };
+              const [rLabel, rCls] = roleMap[c.chat_purpose] || [c.chat_purpose, 'pill-blue'];
+              return `<tr>
           <td><code>${c.chat_id}</code></td>
           <td><b>${esc(c.title)}</b></td>
-          <td><span class="pill pill-blue">${esc(c.chat_purpose)}</span></td>
+          <td><span class="pill ${rCls}">${esc(rLabel)}</span></td>
           <td><span class="pill ${c.bot_is_admin ? 'pill-green' : 'pill-red'}">${c.bot_is_admin ? 'ДА' : 'НЕТ'}</span></td>
-        </tr>`
+        </tr>`;
+            }
           )
-          .join('')}</tbody>
+          .join('') || '<tr><td colspan="4" style="color:var(--text-muted)">Чаты ещё не привязаны. Напишите <code>/bind_alerts_chat ПАРОЛЬ</code> боту в ЛС и <code>/bind_dispatch_chat</code> в группе рабочих.</td></tr>'}</tbody>
       </table>
     </div>
 
