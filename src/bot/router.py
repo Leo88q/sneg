@@ -808,10 +808,29 @@ class BotRouter:
             await self.messenger.answer_callback(
                 cb_id, notification=exc.message[:180], target_chat_id=chat_id or user.max_user_id
             )
-            if not chat_id or chat_id > 0:
+            kb = None
+            if payload.startswith("ord:take:") and "исполнител" in exc.message.lower():
+                kb = InlineKeyboard(
+                    rows=[
+                        [
+                            InlineButton(
+                                type="callback",
+                                text="👷 Стать исполнителем",
+                                payload="exec:register",
+                            )
+                        ]
+                    ]
+                )
+            try:
                 await self.messenger.send_message(
                     MessageTarget(user_id=user.max_user_id),
-                    OutgoingMessage(text=f"⚠️ {exc.message}"),
+                    OutgoingMessage(text=f"⚠️ {exc.message}", keyboard=kb),
+                )
+            except AppError as dm_exc:
+                logger.warning(
+                    "Не удалось отправить пользователю %s пояснение ошибки в ЛС: %s",
+                    user.max_user_id,
+                    dm_exc,
                 )
 
     async def _start_service_flow(self, user: User, service_type: ServiceType) -> None:

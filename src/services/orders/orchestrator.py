@@ -463,9 +463,17 @@ class OrderOrchestrator:
         msg = OutgoingMessage(text=text, keyboard=kb)
 
         if existing_msg_id:
-            await self.messenger.edit_message(
-                existing_msg_id, msg, clear_keyboard=not show_take_button
-            )
+            try:
+                await self.messenger.edit_message(
+                    existing_msg_id, msg, clear_keyboard=not show_take_button
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "Не удалось отредактировать карточку заказа #%s (%s): %s",
+                    order_id,
+                    existing_msg_id,
+                    exc,
+                )
         else:
             sent = await self.messenger.send_message(MessageTarget(chat_id=chat_id), msg)
             async with self.session_factory() as session:
@@ -964,13 +972,29 @@ class OrderOrchestrator:
 
             profile = await session.get(ExecutorProfile, executor_user_id)
             exec_user = await session.get(User, executor_user_id)
-            if (
-                profile is None
-                or exec_user is None
-                or profile.status != ExecutorStatus.ACTIVE.value
-                or exec_user.is_blocked
-            ):
+            if exec_user is None or exec_user.is_blocked:
                 raise PermissionDeniedError("Ваш профиль исполнителя не активирован")
+
+            # Владелец / админ / бригадир может брать заказы без ручной самоверификации
+            if profile is None and exec_user.role in (
+                UserRole.OWNER.value,
+                UserRole.ADMIN.value,
+                UserRole.FOREMAN.value,
+            ):
+                profile = ExecutorProfile(
+                    user_id=exec_user.id,
+                    status=ExecutorStatus.ACTIVE.value,
+                    verified_at=utcnow(),
+                )
+                session.add(profile)
+                await session.flush()
+
+            if profile is None or profile.status != ExecutorStatus.ACTIVE.value:
+                raise PermissionDeniedError(
+                    "Ваш профиль исполнителя ещё не активирован. "
+                    "Откройте личку с ботом и нажмите «👷 Стать исполнителем», "
+                    "затем дождитесь подтверждения диспетчера."
+                )
 
             # Проверка допуска к крышам и срока страховки
             if order.service_type == ServiceType.ROOF_CLEANING.value:

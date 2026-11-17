@@ -482,4 +482,62 @@ async def test_owner_alerts_and_manual_dispatch_to_workers(client: Any) -> None:
     assert disp_resp.status_code == 200
     assert disp_resp.json()["order_status"] == "searching_executor"
 
+    # 7. Посторонний неверифицированный пользователь жмёт "Беру заказ" -> отказ + пояснение в ЛС с кнопкой регистрации
+    stranger_uid = 888002
+    await container.bot_router.handle_update(
+        {
+            "update_id": "take-unverified-1",
+            "update_type": "message_callback",
+            "callback": {
+                "callback_id": "cb-take-stranger",
+                "payload": f"ord:take:{order_id}",
+                "user": {"user_id": stranger_uid, "first_name": "Новичок"},
+            },
+            "message": {"recipient": {"chat_id": brigade_chat_id, "chat_type": "chat"}},
+        }
+    )
+    async with container.session_factory() as session:
+        ord_still_open = await session.get(Order, uuid.UUID(order_id))
+        assert ord_still_open is not None
+        assert ord_still_open.status == "searching_executor"
+        stranger_dms = list(
+            (
+                await session.execute(
+                    select(SimulatorMessage).where(SimulatorMessage.chat_id == stranger_uid)
+                )
+            )
+            .scalars()
+            .all()
+        )
+    assert any("Стать исполнителем" in m.text for m in stranger_dms)
+
+    # 8. Владелец жмёт "Беру заказ" в групповом чате -> профиль активируется, заказ назначен, адрес пришёл в ЛС
+    await container.bot_router.handle_update(
+        {
+            "update_id": "take-owner-1",
+            "update_type": "message_callback",
+            "callback": {
+                "callback_id": "cb-take-owner",
+                "payload": f"ord:take:{order_id}",
+                "user": {"user_id": owner_max_uid, "first_name": "Леонид"},
+            },
+            "message": {"recipient": {"chat_id": brigade_chat_id, "chat_type": "chat"}},
+        }
+    )
+    async with container.session_factory() as session:
+        ord_taken = await session.get(Order, uuid.UUID(order_id))
+        assert ord_taken is not None
+        assert ord_taken.status == "assigned"
+        owner_dms = list(
+            (
+                await session.execute(
+                    select(SimulatorMessage).where(SimulatorMessage.chat_id == owner_max_uid)
+                )
+            )
+            .scalars()
+            .all()
+        )
+    assert any("ул. Красковская, д. 7" in m.text for m in owner_dms)
+
+
 
