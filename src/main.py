@@ -16,6 +16,7 @@ from src.api.admin import router as admin_router
 from src.api.health import router as health_router
 from src.api.legal import router as legal_router
 from src.api.mock_pay import router as mock_pay_router
+from src.api.public import router as public_router
 from src.api.simulator import router as simulator_router
 from src.api.webhooks import router as webhooks_router
 from src.core.config import Settings, get_settings
@@ -88,6 +89,7 @@ def create_app(
 
     app.include_router(health_router)
     app.include_router(legal_router)
+    app.include_router(public_router)
     app.include_router(webhooks_router)
     app.include_router(admin_router)
     app.include_router(media_router)
@@ -117,26 +119,32 @@ def create_app(
 
     @app.get("/pay/return", response_class=HTMLResponse, include_in_schema=False)
     async def pay_return_page(order: str = "") -> HTMLResponse:
+        sim_btn = (
+            '<a class="btn btn-sm" href="/simulator">Открыть симулятор</a>'
+            if cfg.enable_simulator
+            else ""
+        )
+        safe_order = order.replace("<", "").replace(">", "").replace('"', "")
         return HTMLResponse(
             f"""<!doctype html>
 <html lang="ru">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Обработка оплаты · Снег-Диспетчер</title>
+  <title>Обработка оплаты · {cfg.brand_name}</title>
   <link rel="stylesheet" href="/static/fonts.css" />
   <link rel="stylesheet" href="/static/styles.css" />
 </head>
 <body style="display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px">
-  <div class="ice-panel ice-interactive" style="max-width:440px;width:100%;padding:28px;text-align:center">
-    <div class="section-kicker" style="justify-content:center;margin-bottom:10px">СТАТУС СБП</div>
-    <h2 style="margin:0 0 10px;font-size:20px">Оплата заказа <span class="mono">#{order}</span> обрабатывается</h2>
-    <p style="color:var(--text-frost);margin:0 0 22px;font-size:13.5px">
-      Вернитесь в MAX-бот — статус заказа обновится автоматически сразу после подтверждения банком.
+  <div class="ice-panel ice-interactive" style="max-width:460px;width:100%;padding:28px;text-align:center">
+    <div class="section-kicker" style="justify-content:center;margin-bottom:10px">СТАТУС ОПЛАТЫ СБП</div>
+    <h2 style="margin:0 0 10px;font-size:20px">Оплата заказа <span class="mono">#{safe_order}</span> обрабатывается</h2>
+    <p style="color:var(--text-frost);margin:0 0 22px;font-size:13.5px;line-height:1.6">
+      Статус заказа обновится автоматически сразу после подтверждения банком, а кассовый чек 54-ФЗ придёт на указанный контакт.
     </p>
-    <div style="display:flex;gap:10px;justify-content:center">
-      <a class="btn btn-primary btn-sm" href="/simulator">Открыть симулятор</a>
-      <a class="btn btn-sm" href="/admin">Пульт админа</a>
+    <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+      <a class="btn btn-primary btn-sm" href="/#order">Вернуться на главную</a>
+      {sim_btn}
     </div>
   </div>
   <script src="/static/frost-fx.js"></script>

@@ -189,19 +189,25 @@ async function renderDashboard(root) {
 
 function renderOrderRows(orders) {
   if (!orders.length) {
-    return '<tr><td colspan="7" style="color:var(--text-muted);text-align:center;padding:28px">Заказов по фильтру не найдено — создайте новый заказ в Симуляторе MAX.</td></tr>';
+    return '<tr><td colspan="7" style="color:var(--text-muted);text-align:center;padding:28px">Заказов по фильтру пока нет — новые заявки с сайта и из MAX-бота появятся здесь автоматически.</td></tr>';
   }
   return orders
     .map(
       (o) => `
     <tr>
-      <td class="mono"><b>#${o.public_number}</b></td>
+      <td class="mono">
+        <b>#${o.public_number}</b>
+        <div style="font-size:10px;color:var(--text-muted);margin-top:2px">${o.source === 'web_site' ? 'САЙТ' : 'MAX'}</div>
+      </td>
       <td>${esc(o.service_label)}</td>
       <td>
         <b>${esc(o.zone_name || '—')}</b>
         <div style="font-size:11.5px;color:var(--text-muted)">${esc(o.address_text)}</div>
       </td>
-      <td>${esc(o.client_name)}</td>
+      <td>
+        <div>${esc(o.client_name)}</div>
+        ${o.client_phone ? `<div class="mono" style="font-size:11px;color:var(--cryo)">${esc(o.client_phone)}</div>` : ''}
+      </td>
       <td><span class="pill ${statusPillClass(o.status)}">${esc(o.status_label)}</span></td>
       <td class="mono">
         <b>${fmtRub(o.final_total)}</b>
@@ -219,7 +225,7 @@ function filterOrdersTable() {
   const filtered = cachedOrders.filter((o) => {
     if (st && o.status !== st) return false;
     if (q) {
-      const hay = `${o.public_number} ${o.address_text} ${o.client_name} ${o.zone_name} ${o.service_label}`.toLowerCase();
+      const hay = `${o.public_number} ${o.address_text} ${o.client_name} ${o.client_phone || ''} ${o.zone_name} ${o.service_label}`.toLowerCase();
       if (!hay.includes(q)) return false;
     }
     return true;
@@ -304,11 +310,12 @@ async function openOrder(orderId) {
       <div class="ice-panel" style="padding:14px">
         <div class="field-label">МАРШРУТ И КЛИЕНТ</div>
         <div style="display:flex;flex-direction:column;gap:5px;font-size:13px">
-          <div>Статус: <span class="pill ${statusPillClass(o.status)}">${esc(o.status_label)}</span></div>
+          <div>Статус: <span class="pill ${statusPillClass(o.status)}">${esc(o.status_label)}</span> · <span class="pill">${o.source === 'web_site' ? 'Заявка с сайта' : 'MAX-бот'}</span></div>
           <div>Клиент: <b>${esc(o.client.display_name)}</b></div>
           <div>Точный адрес: <b>${esc(o.address_text)}</b></div>
           <div style="color:var(--text-muted)">В общем чате: ${esc(o.public_area_hint)}</div>
-          <div>Связь: <code>${esc(o.contact_mode)}</code> ${o.client.shared_contact_phone ? '· ' + esc(o.client.shared_contact_phone) : ''}</div>
+          <div>Связь: <code>${esc(o.contact_mode)}</code> ${o.client.shared_contact_phone ? `· <a href="tel:${esc(o.client.shared_contact_phone)}">${esc(o.client.shared_contact_phone)}</a>` : ''}${o.client.email ? ` · ${esc(o.client.email)}` : ''}</div>
+          ${o.client_comment ? `<div style="margin-top:4px;padding:7px 9px;border-radius:7px;background:rgba(140,228,255,0.07);color:var(--text-frost)"><b>Комментарий:</b> ${esc(o.client_comment)}</div>` : ''}
         </div>
       </div>
 

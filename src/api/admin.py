@@ -386,12 +386,17 @@ async def list_orders(
     for o in orders:
         client = users.get(o.client_id)
         zone = zones.get(o.geo_zone_id) if o.geo_zone_id else None
+        client_phone = (
+            (client.shared_contact_phone or client.bot_phone or "") if client else ""
+        )
         if q_low and (
             q_low not in str(o.public_number)
             and q_low not in o.address_text.lower()
             and q_low not in (client.display_name.lower() if client else "")
+            and q_low not in client_phone.lower()
         ):
             continue
+        source = str((o.params_json or {}).get("source", "max_bot"))
         result.append(
             {
                 "id": str(o.id),
@@ -405,6 +410,8 @@ async def list_orders(
                 "address_text": o.address_text,
                 "public_area_hint": o.public_area_hint,
                 "client_name": client.display_name if client else "",
+                "client_phone": client_phone,
+                "source": source,
                 "estimated_total": str(o.estimated_total),
                 "final_total": str(o.final_total),
                 "advance_amount": str(o.advance_amount),
@@ -522,11 +529,14 @@ async def get_order_detail(
         "group_discount_amount": str(order.group_discount_amount),
         "executor_bonus_amount": str(order.executor_bonus_amount),
         "contact_mode": order.contact_mode,
+        "client_comment": order.client_comment,
+        "source": str((order.params_json or {}).get("source", "max_bot")),
         "client": {
             "id": str(client.id) if client else "",
             "display_name": client.display_name if client else "",
             "max_user_id": client.max_user_id if client else None,
             "shared_contact_phone": client.shared_contact_phone if client else None,
+            "email": client.email if client else None,
         },
         "assignments": [
             {
@@ -1465,7 +1475,7 @@ async def send_broadcast(
         users = [
             u
             for u in (await session.execute(stmt)).scalars().all()
-            if u.id not in unsubscribed_ids
+            if u.id not in unsubscribed_ids and u.max_user_id > 0
         ]
         await write_audit(
             session,

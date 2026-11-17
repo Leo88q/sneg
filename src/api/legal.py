@@ -1378,6 +1378,14 @@ async def create_data_subject_request(
             User.bot_phone == contact,
             User.shared_contact_phone == contact,
         ]
+        digits = "".join(ch for ch in contact if ch.isdigit())
+        if len(digits) == 10 and digits.startswith("9"):
+            digits = "7" + digits
+        elif len(digits) == 11 and digits.startswith("8"):
+            digits = "7" + digits[1:]
+        if len(digits) == 11 and digits.startswith("7"):
+            filters.append(User.shared_contact_phone == f"+{digits}")
+            filters.append(User.max_user_id == -(100_000_000_000 + int(digits)))
         if body.max_user_id is not None:
             filters.append(User.max_user_id == body.max_user_id)
         elif contact.isdigit():

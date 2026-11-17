@@ -126,6 +126,12 @@ class OrderOrchestrator:
         self._order_locks: dict[uuid.UUID, asyncio.Lock] = defaultdict(asyncio.Lock)
         self._pub_num_lock = asyncio.Lock()
 
+    async def _notify_max_user(self, max_user_id: int | None, msg: OutgoingMessage) -> None:
+        """Отправляет ЛС пользователю MAX; пропускает веб-клиентов (max_user_id <= 0)."""
+        if max_user_id is None or max_user_id <= 0:
+            return
+        await self.messenger.send_message(MessageTarget(user_id=max_user_id), msg)
+
     async def _allocate_public_number(self, session: AsyncSession) -> int:
         async with self._pub_num_lock:
             max_num = (await session.execute(select(func.max(Order.public_number)))).scalar()
@@ -604,9 +610,7 @@ class OrderOrchestrator:
 
         if client_to_notify and order:
             if transitioned_to == OrderStatus.SEARCHING_EXECUTOR:
-                await self.messenger.send_message(
-                    MessageTarget(user_id=client_to_notify.max_user_id),
-                    OutgoingMessage(
+                await self._notify_max_user(client_to_notify.max_user_id, OutgoingMessage(
                         text=(
                             f"✅ **Аванс {payment.amount:.0f} ₽ принят!**\n"
                             f"Заказ **#{order.public_number}** передан бригаде. "
@@ -626,9 +630,7 @@ class OrderOrchestrator:
                     ),
                 )
             elif transitioned_to == OrderStatus.COMPLETED:
-                await self.messenger.send_message(
-                    MessageTarget(user_id=client_to_notify.max_user_id),
-                    OutgoingMessage(
+                await self._notify_max_user(client_to_notify.max_user_id, OutgoingMessage(
                         text=(
                             f"🎉 **Заказ #{order.public_number} полностью оплачен и завершён!**\n"
                             "Спасибо, что выбрали «Снег-Диспетчер»! Оцените, пожалуйста, работу бригады:"
@@ -649,9 +651,7 @@ class OrderOrchestrator:
                 )
 
         for exec_user, total_earned in executors_to_notify:
-            await self.messenger.send_message(
-                MessageTarget(user_id=exec_user.max_user_id),
-                OutgoingMessage(
+            await self._notify_max_user(exec_user.max_user_id, OutgoingMessage(
                     text=(
                         f"💰 **Заказ #{order.public_number} закрыт!**\n"
                         f"Вам начислено: **+{total_earned:.0f} ₽** (отображается в разделе «Мой баланс»)."
@@ -660,9 +660,7 @@ class OrderOrchestrator:
             )
 
         for peer_client, peer_order, saved in neighbor_alerts:
-            await self.messenger.send_message(
-                MessageTarget(user_id=peer_client.max_user_id),
-                OutgoingMessage(
+            await self._notify_max_user(peer_client.max_user_id, OutgoingMessage(
                     text=(
                         f"🏘 **Соседская скидка активирована!**\n"
                         f"На вашей улице/в СНТ появился ещё один заказ на эту дату. "
@@ -919,9 +917,7 @@ class OrderOrchestrator:
             "",
             "Нажмите «Выехал», как только отправитесь на объект (норматив — 15 минут).",
         ]
-        await self.messenger.send_message(
-            MessageTarget(user_id=exec_user.max_user_id),
-            OutgoingMessage(
+        await self._notify_max_user(exec_user.max_user_id, OutgoingMessage(
                 text="\n".join(line for line in dm_lines if line != ""),
                 keyboard=self._executor_order_keyboard(order),
             ),
@@ -929,9 +925,7 @@ class OrderOrchestrator:
 
         # Уведомление клиенту
         if client is not None and order.status == OrderStatus.ASSIGNED.value:
-            await self.messenger.send_message(
-                MessageTarget(user_id=client.max_user_id),
-                OutgoingMessage(
+            await self._notify_max_user(client.max_user_id, OutgoingMessage(
                     text=(
                         f"👷 **Исполнитель найден по заказу #{order.public_number}!**\n"
                         f"К вам назначен: **{exec_user.display_name}** (⭐ {profile.rating}).\n"
@@ -1215,9 +1209,7 @@ class OrderOrchestrator:
             await session.refresh(order)
 
         # Обновляем панель управления исполнителю
-        await self.messenger.send_message(
-            MessageTarget(user_id=actor.max_user_id),
-            OutgoingMessage(
+        await self._notify_max_user(actor.max_user_id, OutgoingMessage(
                 text=f"📌 Статус заказа **#{order.public_number}** обновлён: **{STATUS_LABELS[target_status]}**.",
                 keyboard=(
                     self._executor_order_keyboard(order)
@@ -1230,23 +1222,17 @@ class OrderOrchestrator:
         # Уведомляем клиента
         if client is not None:
             if target_status == OrderStatus.EN_ROUTE:
-                await self.messenger.send_message(
-                    MessageTarget(user_id=client.max_user_id),
-                    OutgoingMessage(
+                await self._notify_max_user(client.max_user_id, OutgoingMessage(
                         text=f"🚗 Исполнитель **выехал** по заказу **#{order.public_number}**! Ориентировочное прибытие: 15–30 минут."
                     ),
                 )
             elif target_status == OrderStatus.ARRIVED:
-                await self.messenger.send_message(
-                    MessageTarget(user_id=client.max_user_id),
-                    OutgoingMessage(
+                await self._notify_max_user(client.max_user_id, OutgoingMessage(
                         text=f"📍 Исполнитель **прибыл на место** по заказу **#{order.public_number}**. Скоро начнёт работу и пришлёт фото «ДО»."
                     ),
                 )
             elif target_status == OrderStatus.IN_PROGRESS:
-                await self.messenger.send_message(
-                    MessageTarget(user_id=client.max_user_id),
-                    OutgoingMessage(
+                await self._notify_max_user(client.max_user_id, OutgoingMessage(
                         text=(
                             f"▶️ Работы по заказу **#{order.public_number}** начались!\n"
                             f"📸 Загружено фото «ДО»: {len(before_media)} шт."
@@ -1262,9 +1248,7 @@ class OrderOrchestrator:
                 )
             elif target_status == OrderStatus.AWAITING_ACCEPTANCE:
                 remainder = max(ZERO, order.final_total - order.paid_amount)
-                await self.messenger.send_message(
-                    MessageTarget(user_id=client.max_user_id),
-                    OutgoingMessage(
+                await self._notify_max_user(client.max_user_id, OutgoingMessage(
                         text=(
                             f"✅ **Работы по заказу #{order.public_number} завершены!**\n"
                             f"📸 Фотоотчёт «ПОСЛЕ» ({len(after_media)} шт.) прикреплён.\n"
@@ -1359,9 +1343,7 @@ class OrderOrchestrator:
             await session.refresh(adj)
 
         if client is not None:
-            await self.messenger.send_message(
-                MessageTarget(user_id=client.max_user_id),
-                OutgoingMessage(
+            await self._notify_max_user(client.max_user_id, OutgoingMessage(
                     text=(
                         f"💰 **Уточнение стоимости по заказу #{order.public_number}**\n"
                         f"Бригадир зафиксировал расхождение объёма на месте:\n"
@@ -1467,9 +1449,7 @@ class OrderOrchestrator:
             await session.refresh(order)
 
         for exec_user in executors_to_notify:
-            await self.messenger.send_message(
-                MessageTarget(user_id=exec_user.max_user_id),
-                OutgoingMessage(
+            await self._notify_max_user(exec_user.max_user_id, OutgoingMessage(
                     text=(
                         f"📢 Ответ клиента по заказу **#{order.public_number}**: {reason_txt}.\n"
                         f"Актуальный итог заказа: **{order.final_total:.0f} ₽**. "
@@ -1581,9 +1561,7 @@ class OrderOrchestrator:
                 await session.refresh(final_payment)
 
         if client is not None and final_payment is not None:
-            await self.messenger.send_message(
-                MessageTarget(user_id=client.max_user_id),
-                OutgoingMessage(
+            await self._notify_max_user(client.max_user_id, OutgoingMessage(
                     text=(
                         f"💳 **Оплата остатка по заказу #{order.public_number}**\n"
                         f"Итого: {order.final_total:.0f} ₽ | Оплачено авансом: {order.paid_amount:.0f} ₽\n"
@@ -1603,9 +1581,7 @@ class OrderOrchestrator:
                 ),
             )
         for exec_user, total_earned in executors_to_notify:
-            await self.messenger.send_message(
-                MessageTarget(user_id=exec_user.max_user_id),
-                OutgoingMessage(
+            await self._notify_max_user(exec_user.max_user_id, OutgoingMessage(
                     text=f"💰 Заказ **#{order.public_number}** закрыт! Начислено **+{total_earned:.0f} ₽**."
                 ),
             )
@@ -1677,9 +1653,7 @@ class OrderOrchestrator:
             await session.refresh(dispute)
 
         for foreman in foremen:
-            await self.messenger.send_message(
-                MessageTarget(user_id=foreman.max_user_id),
-                OutgoingMessage(
+            await self._notify_max_user(foreman.max_user_id, OutgoingMessage(
                     text=(
                         f"⚠️ **Открыт спор по заказу #{order.public_number}!**\n"
                         f"Причина клиента: {reason}\n"
@@ -1775,9 +1749,7 @@ class OrderOrchestrator:
             await session.refresh(dispute)
 
         if client:
-            await self.messenger.send_message(
-                MessageTarget(user_id=client.max_user_id),
-                OutgoingMessage(
+            await self._notify_max_user(client.max_user_id, OutgoingMessage(
                     text=(
                         f"⚖️ **Спор по заказу #{order.public_number} рассмотрен.**\n"
                         f"Решение: {note}\n"
@@ -1943,16 +1915,12 @@ class OrderOrchestrator:
                 if order.paid_amount > ZERO
                 else ""
             )
-            await self.messenger.send_message(
-                MessageTarget(user_id=client.max_user_id),
-                OutgoingMessage(
+            await self._notify_max_user(client.max_user_id, OutgoingMessage(
                     text=f"❌ Заказ **#{order.public_number}** отменён. Причина: {reason}.{extra}"
                 ),
             )
         for u in notified_executors:
-            await self.messenger.send_message(
-                MessageTarget(user_id=u.max_user_id),
-                OutgoingMessage(
+            await self._notify_max_user(u.max_user_id, OutgoingMessage(
                     text=(
                         f"❌ Заказ **#{order.public_number}** отменён ({reason})."
                         + (
@@ -2080,9 +2048,7 @@ class OrderOrchestrator:
             await session.commit()
             await session.refresh(row)
 
-        await self.messenger.send_message(
-            MessageTarget(user_id=recipient.max_user_id),
-            OutgoingMessage(
+        await self._notify_max_user(recipient.max_user_id, OutgoingMessage(
                 text=f"{prefix}\n{text}",
                 keyboard=InlineKeyboard(
                     rows=[
@@ -2166,9 +2132,7 @@ class OrderOrchestrator:
             await session.refresh(batch)
 
         if exec_user:
-            await self.messenger.send_message(
-                MessageTarget(user_id=exec_user.max_user_id),
-                OutgoingMessage(
+            await self._notify_max_user(exec_user.max_user_id, OutgoingMessage(
                     text=(
                         f"💸 **Проведена выплата {batch.total_amount:.0f} ₽!**\n"
                         f"Способ: {payment_method_note}"
@@ -2270,18 +2234,14 @@ class OrderOrchestrator:
             await session.commit()
 
         for uid, pub_num in expired_msgs:
-            await self.messenger.send_message(
-                MessageTarget(user_id=uid),
-                OutgoingMessage(
+            await self._notify_max_user(uid, OutgoingMessage(
                     text=f"⏱ Заказ **#{pub_num}** отменён: истёк срок оплаты аванса."
                 ),
             )
         for oid, pub_num, area_hint, bonus in escalated_ids:
             await self._publish_or_update_dispatch_card(oid, show_take_button=True)
             for fm_uid in foreman_max_ids:
-                await self.messenger.send_message(
-                    MessageTarget(user_id=fm_uid),
-                    OutgoingMessage(
+                await self._notify_max_user(fm_uid, OutgoingMessage(
                         text=(
                             f"🚨 **Эскалация!** Заказ **#{pub_num}** "
                             f"({area_hint}) никто не взял.\n"
@@ -2327,9 +2287,7 @@ class OrderOrchestrator:
                         )
                     )
         for max_uid, zname, sub_id, window, addr in targets:
-            await self.messenger.send_message(
-                MessageTarget(user_id=max_uid),
-                OutgoingMessage(
+            await self._notify_max_user(max_uid, OutgoingMessage(
                     text=(
                         f"❄️ **Прогноз снегопада ({zname}): ожидается {snow_cm:.0f} см!**\n"
                         f"По вашей подписке планируем выезд к **{window}** "
