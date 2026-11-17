@@ -89,7 +89,11 @@ def _render_legal_page(
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#04101a" />
   <title>{_e(title)} — {brand}</title>
+  <link rel="icon" href="/favicon.ico" sizes="any" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32x32.png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png" />
   <link rel="stylesheet" href="/static/fonts.css" />
   <link rel="stylesheet" href="/static/styles.css" />
   <style>
@@ -338,11 +342,8 @@ def _render_legal_page(
 <body>
   <header class="topbar">
     <div class="brand">
-      <div class="brand-mark" aria-hidden="true">
-        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8">
-          <path d="M12 2v20M2 12h20M4.93 4.93l14.14 14.14M19.07 4.93L4.93 19.07"/>
-          <circle cx="12" cy="12" r="3"/>
-        </svg>
+      <div class="brand-mark brand-mark-img" aria-hidden="true">
+        <img src="/static/brand-logo.png" alt="{brand}" width="38" height="38" />
       </div>
       <div class="brand-sub">
         <span>{brand} · ПРАВОВОЙ ЦЕНТР</span>

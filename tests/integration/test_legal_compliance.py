@@ -73,8 +73,14 @@ async def test_all_legal_pages_and_self_hosted_fonts_zero_google_cdn(client: Any
     assert mj["phone"] == "+7 (977) 924-02-93"
     assert mj["email"] == "holmatovleonid25@gmail.com"
 
-    # Проверяем сами локальные шрифты и OFL-лицензии
+    # Проверяем сами локальные шрифты, OFL-лицензии и фирменные иконки сайта
     for asset in [
+        "/favicon.ico",
+        "/apple-touch-icon.png",
+        "/static/favicon-32x32.png",
+        "/static/favicon-192x192.png",
+        "/static/brand-logo.png",
+        "/static/chistodvor-bot-logo.png",
         "/static/fonts.css",
         "/static/fonts/unbounded-cyrillic-700-normal.woff2",
         "/static/fonts/golos-text-cyrillic-400-normal.woff2",
@@ -84,7 +90,7 @@ async def test_all_legal_pages_and_self_hosted_fonts_zero_google_cdn(client: Any
         "/static/fonts/licenses/OFL-JetBrains-Mono.txt",
     ]:
         r = await http.get(asset)
-        assert r.status_code == 200, f"Font asset missing: {asset}"
+        assert r.status_code == 200, f"Asset missing: {asset}"
 
 
 @pytest.mark.asyncio

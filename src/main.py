@@ -107,6 +107,14 @@ def create_app(
     async def index_page() -> FileResponse:
         return FileResponse(WEB_DIR / "index.html")
 
+    @app.get("/favicon.ico", include_in_schema=False)
+    async def favicon_ico() -> FileResponse:
+        return FileResponse(WEB_DIR / "static" / "favicon.ico", media_type="image/x-icon")
+
+    @app.get("/apple-touch-icon.png", include_in_schema=False)
+    async def apple_touch_icon() -> FileResponse:
+        return FileResponse(WEB_DIR / "static" / "apple-touch-icon.png", media_type="image/png")
+
     @app.get("/admin", response_class=HTMLResponse, include_in_schema=False)
     async def admin_page() -> FileResponse:
         return FileResponse(WEB_DIR / "admin.html")
@@ -131,7 +139,11 @@ def create_app(
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="theme-color" content="#04101a" />
   <title>Обработка оплаты · {cfg.brand_name}</title>
+  <link rel="icon" href="/favicon.ico" sizes="any" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32x32.png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png" />
   <link rel="stylesheet" href="/static/fonts.css" />
   <link rel="stylesheet" href="/static/styles.css" />
 </head>
