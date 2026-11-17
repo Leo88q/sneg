@@ -126,7 +126,7 @@ async def seed_initial_data(session: AsyncSession, settings: Settings) -> None:
                 version=1,
                 is_active=True,
                 config_json=get_default_tariff_config(),
-                comment="Рыночный прайс МО 2026 (Люберцы / Малаховка)",
+                comment="Прайс МО 2026 с учётом аренды техники на субподряде",
             )
         )
 

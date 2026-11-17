@@ -320,11 +320,20 @@ async function openOrder(orderId) {
       </div>
 
       <div class="ice-panel" style="padding:14px">
-        <div class="field-label">РАСЧЁТ И СБП</div>
+        <div class="field-label">РАСЧЁТ, СБП И МАРЖА ИП</div>
         <div class="receipt-row"><span>Ориентировочно</span><b class="mono">${fmtRub(o.estimated_total)}</b></div>
         <div class="receipt-row"><span>Итоговая сумма</span><b class="mono" style="color:var(--cryo)">${fmtRub(o.final_total)}</b></div>
         <div class="receipt-row"><span>Аванс / Оплачено</span><b class="mono">${fmtRub(o.advance_amount)} / ${fmtRub(o.paid_amount)}</b></div>
         <div class="receipt-row"><span>Скидка / Бонус бригаде</span><span class="mono">${fmtRub(o.group_discount_amount)} / ${fmtRub(o.executor_bonus_amount)}</span></div>
+        ${
+          o.pricing_snapshot?.unit_economics
+            ? `
+          <div style="margin-top:8px;padding-top:8px;border-top:1px dashed rgba(145,224,255,0.2)">
+            ${Number(o.pricing_snapshot.unit_economics.equipment_rental_rub) > 0 ? `<div class="receipt-row"><span>Бюджет аренды техники</span><b class="mono" style="color:var(--beacon-amber)">${fmtRub(o.pricing_snapshot.unit_economics.equipment_rental_rub)}</b></div>` : ''}
+            <div class="receipt-row"><span>Прогноз чистой прибыли ИП</span><b class="mono" style="color:var(--aurora-mint)">+${fmtRub(o.pricing_snapshot.unit_economics.owner_net_profit_rub)} (${esc(o.pricing_snapshot.unit_economics.owner_margin_pct)}%)</b></div>
+          </div>`
+            : ''
+        }
       </div>
     </div>
 
@@ -521,7 +530,24 @@ async function renderTariffs(root) {
           </div>
         </div>
 
-        <button class="btn btn-success" onclick="runPreview()">Рассчитать смету по JSON</button>
+        <div class="split-2">
+          <div>
+            <label class="field-label">Заезд / техника</label>
+            <select id="pv-access">
+              <option value="narrow_gate">Узкая калитка (вручную)</option>
+              <option value="standard" selected>Обычные ворота (снегоуб.)</option>
+              <option value="wide_road">Широкий заезд (трактор &gt;350 м²)</option>
+            </select>
+          </div>
+          <div style="display:flex;align-items:flex-end;padding-bottom:6px">
+            <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;color:var(--text-frost)">
+              <input type="checkbox" id="pv-removal" onchange="runPreview()" />
+              <span>Вывоз снега (самосвал)</span>
+            </label>
+          </div>
+        </div>
+
+        <button class="btn btn-success" onclick="runPreview()">Рассчитать смету и маржу</button>
         <div id="pv-out" class="receipt-box">
           <div style="color:var(--text-muted);font-size:12.5px">Нажмите «Рассчитать смету», чтобы увидеть детализацию.</div>
         </div>
@@ -537,29 +563,51 @@ function applyMarket2026Tariff() {
     const cfg = JSON.parse(area.value);
     cfg.min_order_total_rub = 2000;
     cfg.min_advance_rub = 700;
+    cfg.subcontract_advance_pct = 50;
+    cfg.tax_and_acquiring_pct = 7.9;
+    cfg.equipment_rental_estimates = {
+      snowblower_rental_rub: 2200,
+      tractor_subcontract_share_pct: 70,
+      snow_removal_subcontract_share_pct: 72,
+      car_rescue_subcontract_share_pct: 65,
+      tool_rental_rub: 1200,
+    };
+    if (cfg.advance_pct_by_service) {
+      cfg.advance_pct_by_service.snow_road = 50;
+    }
     if (cfg.snow && cfg.snow.methods) {
       if (cfg.snow.methods.manual) {
         cfg.snow.methods.manual.rate_per_m2 = 40;
         cfg.snow.methods.manual.min_work_price = 2500;
       }
       if (cfg.snow.methods.snowblower_or_miniloader) {
-        cfg.snow.methods.snowblower_or_miniloader.rate_per_m2 = 30;
-        cfg.snow.methods.snowblower_or_miniloader.min_work_price = 3000;
+        cfg.snow.methods.snowblower_or_miniloader.rate_per_m2 = 42;
+        cfg.snow.methods.snowblower_or_miniloader.min_work_price = 5500;
       }
       if (cfg.snow.methods.tractor) {
-        cfg.snow.methods.tractor.rate_per_m2 = 20;
-        cfg.snow.methods.tractor.min_work_price = 5000;
+        cfg.snow.methods.tractor.rate_per_m2 = 30;
+        cfg.snow.methods.tractor.min_work_price = 14500;
       }
     }
+    if (cfg.snow && cfg.snow.auto_select_thresholds_m2) {
+      cfg.snow.auto_select_thresholds_m2.manual_max = 100;
+      cfg.snow.auto_select_thresholds_m2.small_tech_max = 350;
+    }
     if (cfg.snow && cfg.snow.snow_removal) {
-      cfg.snow.snow_removal.rate_per_m3 = 600;
-      cfg.snow.snow_removal.min_removal_price = 7500;
+      cfg.snow.snow_removal.rate_per_m3 = 850;
+      cfg.snow.snow_removal.min_removal_price = 13500;
       delete cfg.snow.snow_removal.min_price;
+    }
+    if (cfg.car_rescue) {
+      cfg.car_rescue.base_price = 3500;
+      cfg.car_rescue.per_km_rate = 120;
+      cfg.car_rescue.vehicle_surcharge = { sedan: 0, suv: 700, commercial: 2000 };
     }
     if (cfg.hourly) {
       cfg.hourly.yard_help_rate_per_hour = 700;
       cfg.hourly.movers_rate_per_hour = 750;
       cfg.hourly.floor_no_lift_surcharge_per_worker = 200;
+      cfg.hourly.equipment_fee = 2000;
     }
     if (cfg.roof_and_reagents) {
       cfg.roof_and_reagents.roof_rate_per_m2 = 90;
@@ -570,10 +618,10 @@ function applyMarket2026Tariff() {
     area.value = JSON.stringify(cfg, null, 2);
     const commentEl = document.getElementById('tariff-comment');
     if (commentEl && !commentEl.value.trim()) {
-      commentEl.value = 'Рыночный прайс МО 2026 (Люберцы / Малаховка)';
+      commentEl.value = 'Прайс МО 2026 с учётом аренды техники на субподряде';
     }
     runPreview();
-    toast('Подставлены рыночные ставки МО 2026 — проверьте смету справа и нажмите «Сохранить»');
+    toast('Подставлены ставки МО 2026 с арендой техники — проверьте маржу справа и нажмите «Сохранить»');
   } catch (e) {
     toast('Ошибка JSON: ' + e.message);
   }
@@ -597,30 +645,50 @@ async function saveTariff() {
 async function runPreview() {
   try {
     const override_config = JSON.parse(document.getElementById('tariff-json').value);
+    const areaVal = Number(document.getElementById('pv-area').value) || 100;
     const res = await api('/api/v1/admin/tariffs/preview', {
       method: 'POST',
       body: JSON.stringify({
         service_type: document.getElementById('pv-svc').value,
         geo_zone_code: document.getElementById('pv-zone').value,
-        area_m2: Number(document.getElementById('pv-area').value),
-        length_m: 40,
+        area_m2: areaVal,
+        length_m: Math.max(10, Math.round(areaVal / 4)),
         width_m: 4,
         depth_bucket: document.getElementById('pv-depth').value,
+        access_constraint: document.getElementById('pv-access')?.value || 'standard',
         urgency: document.getElementById('pv-urg').value,
+        snow_removal: Boolean(document.getElementById('pv-removal')?.checked),
         override_config,
       }),
     });
+    const ue = res.pricing_snapshot?.unit_economics || null;
+    const profitNum = ue ? Number(ue.owner_net_profit_rub) : 0;
+    const profitColor = profitNum > 0 ? 'var(--aurora-mint)' : '#ff6b81';
     document.getElementById('pv-out').innerHTML = `
       <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px">
-        <span class="field-label" style="margin:0">ОРИЕНТИРОВОЧНО К ОПЛАТЕ</span>
+        <span class="field-label" style="margin:0">КЛИЕНТУ К ОПЛАТЕ</span>
         <span class="receipt-total">${fmtRub(res.estimated_total)}</span>
       </div>
       <div class="receipt-row"><span>Стоимость работ</span><b class="mono">${fmtRub(res.work_cost)}</b></div>
+      ${Number(res.extras_cost) > 0 ? `<div class="receipt-row"><span>Вывоз снега / допы</span><b class="mono">${fmtRub(res.extras_cost)}</b></div>` : ''}
       <div class="receipt-row"><span>Выезд бригады</span><b class="mono">${fmtRub(res.dispatch_fee)}</b></div>
-      <div class="receipt-row"><span>Аванс СБП</span><b class="mono" style="color:var(--aurora-mint)">${fmtRub(res.advance_amount)}</b></div>
+      <div class="receipt-row"><span>Аванс СБП (${esc(res.pricing_snapshot?.advance_pct || '—')}%)</span><b class="mono" style="color:var(--cryo)">${fmtRub(res.advance_amount)}</b></div>
       <div class="receipt-row"><span>Остаток после приёмки</span><b class="mono">${fmtRub(res.remainder_amount)}</b></div>
-      <div class="receipt-row"><span>Прогноз выплаты исполнителю</span><b class="mono" style="color:var(--beacon-amber)">${fmtRub(res.estimated_executor_payout)}</b></div>
       ${res.cleaning_method ? `<div class="receipt-row"><span>Автовыбор техники</span><code>${esc(res.cleaning_method)}</code></div>` : ''}
+      ${
+        ue
+          ? `<div style="margin-top:10px;padding-top:10px;border-top:1px dashed rgba(145,224,255,0.22)">
+              <div class="field-label" style="margin-bottom:6px">ЮНИТ-ЭКОНОМИКА ИП (СУБПОДРЯД / АРЕНДА)</div>
+              ${Number(ue.equipment_rental_rub) > 0 ? `<div class="receipt-row"><span>Аренда техники / субподряд</span><b class="mono" style="color:var(--beacon-amber)">−${fmtRub(ue.equipment_rental_rub)}</b></div>` : ''}
+              ${Number(ue.labor_payout_rub) > 0 ? `<div class="receipt-row"><span>Выплата бригаде</span><b class="mono" style="color:var(--beacon-amber)">−${fmtRub(ue.labor_payout_rub)}</b></div>` : ''}
+              <div class="receipt-row"><span>УСН 6% + ЮKassa (~${esc(ue.tax_and_acquiring_pct)}%)</span><b class="mono">−${fmtRub(ue.tax_and_acquiring_rub)}</b></div>
+              <div class="receipt-row" style="margin-top:4px;font-size:14px">
+                <span><b>Чистая прибыль ИП</b></span>
+                <b class="mono" style="color:${profitColor}">${profitNum >= 0 ? '+' : ''}${fmtRub(ue.owner_net_profit_rub)} (${esc(ue.owner_margin_pct)}%)</b>
+              </div>
+            </div>`
+          : `<div class="receipt-row"><span>Прогноз выплаты исполнителю</span><b class="mono" style="color:var(--beacon-amber)">${fmtRub(res.estimated_executor_payout)}</b></div>`
+      }
     `;
   } catch (e) {
     toast('Ошибка расчёта: ' + e.message);

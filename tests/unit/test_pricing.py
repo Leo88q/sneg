@@ -32,7 +32,7 @@ from src.domain.pricing.defaults import DEFAULT_GEO_ZONES, DEFAULT_TARIFF_CONFIG
 
 
 def test_market_2026_snow_yard_snowblower_example() -> None:
-    """МО 2026: 120 м², 10–30 см (×1.5), снегоуборщик (30 ₽/м²), за 3 ч (×1.3), Малаховка (500 ₽)."""
+    """МО 2026 (аренда техники): 120 м², 10–30 см (×1.5), снегоуборщик (42 ₽/м²), за 3 ч (×1.3), Малаховка."""
     day_utc = datetime(2026, 1, 15, 9, 0, tzinfo=UTC)  # 12:00 MSK (daytime)
     res = calculate_price(
         PriceCalculationInput(
@@ -46,18 +46,22 @@ def test_market_2026_snow_yard_snowblower_example() -> None:
         DEFAULT_TARIFF_CONFIG,
         now_utc=day_utc,
     )
-    # 120 * 30 * 1.5 * 1.3 = 7020 + 500 = 7520 -> round50 = 7500
-    assert res.estimated_total == Decimal("7500.00")
-    assert res.advance_amount == Decimal("2250.00")
-    assert res.remainder_amount == Decimal("5250.00")
+    # 120 * 42 * 1.5 * 1.3 = 9828 + 500 = 10328 -> round50 = 10350
+    assert res.estimated_total == Decimal("10350.00")
+    assert res.advance_amount == Decimal("3100.00")
+    assert res.remainder_amount == Decimal("7250.00")
     assert res.is_night is False
+    ue = res.pricing_snapshot["unit_economics"]
+    assert ue["requires_equipment_rental"] is True
+    assert Decimal(ue["equipment_rental_rub"]) == Decimal("2200.00")
+    assert Decimal(ue["owner_net_profit_rub"]) > Decimal("1500.00")
 
 
-def test_market_2026_snow_manual_min_and_snow_removal() -> None:
-    """МО 2026: ручной минимум 2 500 ₽ и вывоз снега 600 ₽/м³ (мин. 7 500 ₽)."""
+def test_market_2026_snow_manual_tractor_and_snow_removal_with_rental_margin() -> None:
+    """МО 2026: ручной минимум, аренда трактора (14 500 ₽ + 50% аванс) и вывоз снега (850 ₽/м³, мин. 13 500 ₽)."""
     day_utc = datetime(2026, 1, 15, 9, 0, tzinfo=UTC)
 
-    # 50 м² до 10 см вручную -> min_work_price 2500 + 500 выезд = 3000
+    # 50 м² до 10 см вручную -> min_work_price 2500 + 500 выезд = 3000 (без аренды техники)
     res_small = calculate_price(
         PriceCalculationInput(
             service_type=ServiceType.SNOW_YARD,
@@ -73,8 +77,9 @@ def test_market_2026_snow_manual_min_and_snow_removal() -> None:
     assert res_small.work_cost == Decimal("2500.00")
     assert res_small.estimated_total == Decimal("3000.00")
     assert res_small.advance_amount == Decimal("900.00")
+    assert res_small.pricing_snapshot["unit_economics"]["requires_equipment_rental"] is False
 
-    # 50 м² 10-30 см с вывозом (10 м³ -> срабатывает мин. вывоза 7500 ₽)
+    # 50 м² 10-30 см с вывозом (10 м³ -> мин. вывоза 13 500 ₽; аванс 50% для защиты брони самосвала!)
     res_rem_min = calculate_price(
         PriceCalculationInput(
             service_type=ServiceType.SNOW_YARD,
@@ -88,29 +93,51 @@ def test_market_2026_snow_manual_min_and_snow_removal() -> None:
         DEFAULT_TARIFF_CONFIG,
         now_utc=day_utc,
     )
-    assert res_rem_min.extras_cost == Decimal("7500.00")
-    assert res_rem_min.estimated_total == Decimal("11000.00")
+    assert res_rem_min.extras_cost == Decimal("13500.00")
+    assert res_rem_min.estimated_total == Decimal("17000.00")
+    assert res_rem_min.advance_amount == Decimal("8500.00")
+    assert Decimal(res_rem_min.pricing_snapshot["unit_economics"]["owner_net_profit_rub"]) > Decimal("2500.00")
 
-    # 100 м² 10-30 см с вывозом (20 м³ * 600 = 12000 ₽) + работа 4500 + выезд 500 = 17000 ₽
+    # 100 м² 10-30 см (автовыбор вручную до 100 м²) + вывоз 20 м³ * 850 = 17 000 ₽
     res_rem_vol = calculate_price(
         PriceCalculationInput(
             service_type=ServiceType.SNOW_YARD,
             dispatch_fee=Decimal("500.00"),
             area_m2=Decimal("100"),
             depth_bucket=DepthBucket.FROM_10_TO_30,
-            cleaning_method=CleaningMethod.SNOWBLOWER_OR_MINILOADER,
             urgency=UrgencyLevel.TODAY,
             snow_removal=True,
         ),
         DEFAULT_TARIFF_CONFIG,
         now_utc=day_utc,
     )
-    assert res_rem_vol.extras_cost == Decimal("12000.00")
-    assert res_rem_vol.estimated_total == Decimal("17000.00")
+    assert res_rem_vol.cleaning_method == CleaningMethod.MANUAL
+    assert res_rem_vol.extras_cost == Decimal("17000.00")
+    assert res_rem_vol.estimated_total == Decimal("23500.00")
+    assert res_rem_vol.advance_amount == Decimal("11750.00")
+
+    # Трактор на субподряде: минимум 14 500 + 500 = 15 000 ₽, аванс 50% = 7 500 ₽, чистая прибыль > 3 000 ₽
+    res_tractor = calculate_price(
+        PriceCalculationInput(
+            service_type=ServiceType.SNOW_YARD,
+            dispatch_fee=Decimal("500.00"),
+            area_m2=Decimal("200"),
+            depth_bucket=DepthBucket.UP_TO_10,
+            cleaning_method=CleaningMethod.TRACTOR,
+            urgency=UrgencyLevel.TODAY,
+        ),
+        DEFAULT_TARIFF_CONFIG,
+        now_utc=day_utc,
+    )
+    assert res_tractor.estimated_total == Decimal("15000.00")
+    assert res_tractor.advance_amount == Decimal("7500.00")
+    ue_tr = res_tractor.pricing_snapshot["unit_economics"]
+    assert Decimal(ue_tr["equipment_rental_rub"]) == Decimal("10650.00")
+    assert Decimal(ue_tr["owner_net_profit_rub"]) == Decimal("3165.00")
 
 
 def test_tz_b7_2_example_2_car_rescue() -> None:
-    """TZ Section B7.2 Example 2: 2500 + 500 urgent + 1000 night + 500 suv + 3*100km = 4800 ₽."""
+    """МО 2026 (субподряд 4x4): 3500 + 500 urgent + 1000 night + 700 suv + 3*120km = 6060 -> 6050 ₽."""
     night_utc = datetime(2026, 1, 15, 21, 0, tzinfo=UTC)  # 00:00 MSK
     res = calculate_price(
         PriceCalculationInput(
@@ -122,10 +149,11 @@ def test_tz_b7_2_example_2_car_rescue() -> None:
         DEFAULT_TARIFF_CONFIG,
         now_utc=night_utc,
     )
-    assert res.estimated_total == Decimal("4800.00")
-    assert res.advance_amount == Decimal("2400.00")
-    assert res.remainder_amount == Decimal("2400.00")
+    assert res.estimated_total == Decimal("6050.00")
+    assert res.advance_amount == Decimal("3050.00")
+    assert res.remainder_amount == Decimal("3000.00")
     assert res.is_night is True
+    assert Decimal(res.pricing_snapshot["unit_economics"]["owner_net_profit_rub"]) > Decimal("1400.00")
 
 
 def test_rounding_half_up_to_50_rub() -> None:
@@ -385,7 +413,9 @@ def test_alembic_0003_upgrades_legacy_v1_tariff_to_market_2026() -> None:
         v2_cfg = json.loads(rows[1][2]) if isinstance(rows[1][2], str) else rows[1][2]
         assert v2_cfg["min_order_total_rub"] == 2000
         assert v2_cfg["snow"]["methods"]["manual"]["rate_per_m2"] == 40
-        assert v2_cfg["snow"]["snow_removal"]["min_removal_price"] == 7500
+        assert v2_cfg["snow"]["methods"]["tractor"]["min_work_price"] == 14500
+        assert v2_cfg["snow"]["snow_removal"]["min_removal_price"] == 13500
+        assert v2_cfg["car_rescue"]["base_price"] == 3500
         assert v2_cfg["hourly"]["movers_rate_per_hour"] == 750
 
     # Повторный вызов upgrade() — безопасный no-op
@@ -397,4 +427,67 @@ def test_alembic_0003_upgrades_legacy_v1_tariff_to_market_2026() -> None:
     with engine.connect() as conn:
         count = conn.execute(sa.text("SELECT COUNT(1) FROM tariff_configs")).scalar()
         assert count == 2
+
+
+def test_alembic_0004_upgrades_v2_without_rental_to_v3_subcontract_tariffs() -> None:
+    """Миграция 0004 переводит БД с v2 (трактор 5 000 ₽) на v3 с заложенной арендой техники (14 500 ₽)."""
+    import importlib.util
+    import json
+    import uuid
+    from pathlib import Path
+
+    import sqlalchemy as sa
+    from alembic.migration import MigrationContext
+    from alembic.operations import Operations
+
+    from src.infra.db.models import Base
+
+    mig_path = Path("migrations/versions/0004_subcontract_rental_tariffs.py")
+    spec = importlib.util.spec_from_file_location("mig_0004", mig_path)
+    assert spec is not None and spec.loader is not None
+    mig = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mig)
+
+    engine = sa.create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+
+    v2_no_rental = {
+        "min_order_total_rub": 2000,
+        "snow": {
+            "methods": {
+                "manual": {"rate_per_m2": 40, "min_work_price": 2500},
+                "tractor": {"rate_per_m2": 20, "min_work_price": 5000},
+            }
+        },
+    }
+    with engine.begin() as conn:
+        conn.execute(
+            sa.text(
+                "INSERT INTO tariff_configs (id, version, is_active, config_json, comment, created_at) "
+                "VALUES (:id, 2, 1, :cfg, 'Рыночный прайс МО 2026 (Люберцы / Малаховка, автомиграция v2)', :ts)"
+            ),
+            {
+                "id": uuid.uuid4().hex,
+                "cfg": json.dumps(v2_no_rental),
+                "ts": datetime.now(UTC).isoformat(),
+            },
+        )
+
+    with engine.begin() as conn:
+        ctx = MigrationContext.configure(conn)
+        with Operations.context(ctx):
+            mig.upgrade()
+
+    with engine.connect() as conn:
+        rows = conn.execute(
+            sa.text("SELECT version, is_active, config_json FROM tariff_configs ORDER BY version ASC")
+        ).fetchall()
+        assert len(rows) == 2
+        assert rows[0][0] == 2 and not rows[0][1]
+        assert rows[1][0] == 3 and bool(rows[1][1])
+        v3_cfg = json.loads(rows[1][2]) if isinstance(rows[1][2], str) else rows[1][2]
+        assert v3_cfg["snow"]["methods"]["tractor"]["min_work_price"] == 14500
+        assert v3_cfg["snow"]["methods"]["snowblower_or_miniloader"]["min_work_price"] == 5500
+        assert v3_cfg["snow"]["snow_removal"]["min_removal_price"] == 13500
+        assert v3_cfg["car_rescue"]["base_price"] == 3500
 

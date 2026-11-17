@@ -1,4 +1,4 @@
-"""Актуальные рыночные тарифы МО 2026 (Люберцы / Малаховка) и геозоны."""
+"""Актуальные тарифы МО 2026 с учётом аренды техники на субподряде (Люберцы / Малаховка)."""
 
 from __future__ import annotations
 
@@ -10,9 +10,10 @@ DEFAULT_TARIFF_CONFIG: dict[str, Any] = {
     "night_window_msk": {"start_hour": 22, "end_hour": 7},
     "min_order_total_rub": 2000,
     "min_advance_rub": 700,
+    "subcontract_advance_pct": 50,
     "advance_pct_by_service": {
         "snow_yard": 30,
-        "snow_road": 30,
+        "snow_road": 50,
         "car_rescue": 50,
         "yard_help": 30,
         "movers": 30,
@@ -29,32 +30,40 @@ DEFAULT_TARIFF_CONFIG: dict[str, Any] = {
         "reagents": 65,
     },
     "dispatch_compensation_pct_to_executor": 100,
+    "tax_and_acquiring_pct": 7.9,
+    "equipment_rental_estimates": {
+        "snowblower_rental_rub": 2200,
+        "tractor_subcontract_share_pct": 70,
+        "snow_removal_subcontract_share_pct": 72,
+        "car_rescue_subcontract_share_pct": 65,
+        "tool_rental_rub": 1200,
+    },
     "snow": {
         "depth_coeff": {"up_to_10": 1.0, "from_10_to_30": 1.5, "over_30": 2.0},
         "depth_avg_m": {"up_to_10": 0.08, "from_10_to_30": 0.20, "over_30": 0.40},
         "urgency_coeff": {"today": 1.0, "within_3h": 1.3, "now_or_night": 1.5},
         "methods": {
             "manual": {"rate_per_m2": 40, "min_work_price": 2500},
-            "snowblower_or_miniloader": {"rate_per_m2": 30, "min_work_price": 3000},
-            "tractor": {"rate_per_m2": 20, "min_work_price": 5000},
+            "snowblower_or_miniloader": {"rate_per_m2": 42, "min_work_price": 5500},
+            "tractor": {"rate_per_m2": 30, "min_work_price": 14500},
         },
-        "auto_select_thresholds_m2": {"manual_max": 80, "small_tech_max": 400},
-        "snow_removal": {"rate_per_m3": 600, "min_removal_price": 7500},
+        "auto_select_thresholds_m2": {"manual_max": 100, "small_tech_max": 350},
+        "snow_removal": {"rate_per_m3": 850, "min_removal_price": 13500},
     },
     "car_rescue": {
-        "base_price": 2500,
+        "base_price": 3500,
         "urgency_surcharge": 500,
         "night_surcharge": 1000,
-        "vehicle_surcharge": {"sedan": 0, "suv": 500, "commercial": 1500},
+        "vehicle_surcharge": {"sedan": 0, "suv": 700, "commercial": 2000},
         "free_radius_km": 5,
-        "per_km_rate": 100,
+        "per_km_rate": 120,
     },
     "hourly": {
         "min_hours": 2,
         "yard_help_rate_per_hour": 700,
         "movers_rate_per_hour": 750,
         "floor_no_lift_surcharge_per_worker": 200,
-        "equipment_fee": 1500,
+        "equipment_fee": 2000,
     },
     "roof_and_reagents": {
         "roof_rate_per_m2": 90,

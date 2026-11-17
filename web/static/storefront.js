@@ -360,7 +360,7 @@
 
             <label class="ice-check">
               <input type="checkbox" id="p-snow-removal" ${state.snow_removal ? 'checked' : ''} />
-              <span><strong>Добавить вывоз снега с участка</strong></span>
+              <span><strong>Добавить вывоз снега самосвалом с погрузкой</strong> (аванс 50%)</span>
             </label>
           </div>
         </details>
@@ -419,7 +419,7 @@
             </div>
             <label class="ice-check">
               <input type="checkbox" id="p-snow-removal" ${state.snow_removal ? 'checked' : ''} />
-              <span><strong>Добавить вывоз снега</strong></span>
+              <span><strong>Добавить вывоз снега самосвалом с погрузкой</strong> (аванс 50%)</span>
             </label>
           </div>
         </details>
@@ -429,8 +429,8 @@
         <div class="param-block">
           ${renderPillGroup('vehicle_type', state.vehicle_type, [
             { value: 'sedan', label: 'Легковая', hint: 'Базовая цена' },
-            { value: 'suv', label: 'Внедорожник', hint: '+500 ₽' },
-            { value: 'commercial', label: 'Фургон / микроавтобус', hint: '+1 500 ₽' },
+            { value: 'suv', label: 'Внедорожник', hint: '+700 ₽' },
+            { value: 'commercial', label: 'Фургон / микроавтобус', hint: '+2 000 ₽' },
           ])}
         </div>
 
@@ -504,7 +504,7 @@
             }
             <label class="ice-check">
               <input type="checkbox" id="p-equip" ${state.needs_equipment ? 'checked' : ''} />
-              <span><strong>Нужен наш инструмент / инвентарь</strong> (+1 500 ₽)</span>
+              <span><strong>Нужен наш инструмент / инвентарь</strong> (+2 000 ₽)</span>
             </label>
           </div>
         </details>
