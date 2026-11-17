@@ -266,3 +266,35 @@ def test_max_setup_validator() -> None:
     assert url == "https://chistodvor.ru/webhooks/max"
     assert secret == "chistodvor_max_webhook_2026_abc123"
 
+
+@pytest.mark.asyncio
+async def test_max_answer_callback_always_sends_notification() -> None:
+    """MAX API POST /answers требует message или notification — пустой {} запрещён."""
+    import json
+
+    from src.services.messenger.max_client import MaxApiClient
+
+    captured: list[dict[str, object]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content.decode()) if request.content else {}
+        captured.append(body)
+        if not body.get("notification") and not body.get("message"):
+            return httpx.Response(
+                400,
+                json={
+                    "code": "proto.payload",
+                    "message": "Invalid request. message or notification required",
+                },
+            )
+        return httpx.Response(200, json={"success": True})
+
+    async with httpx.AsyncClient(
+        base_url="https://platform-api2.max.ru", transport=httpx.MockTransport(handler)
+    ) as mock_http:
+        max_client = MaxApiClient(token="test-token", http_client=mock_http)
+        ok = await max_client.answer_callback("cb-123", target_chat_id=617884255)
+        assert ok is True
+        assert captured == [{"notification": "✓"}]
+
+

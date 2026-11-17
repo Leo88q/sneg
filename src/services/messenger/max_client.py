@@ -191,14 +191,24 @@ class MaxApiClient:
             payload["notification"] = notification
         if message is not None:
             payload["message"] = message.to_max_body()
-        data = await self._request(
-            "POST",
-            "/answers",
-            params={"callback_id": callback_id},
-            json_body=payload,
-            chat_key=f"cb:{target_chat_id}" if target_chat_id else None,
-        )
-        return bool(data.get("success", True))
+        if not payload:
+            # MAX Bot API (POST /answers) строго требует message или notification
+            payload["notification"] = "✓"
+        try:
+            data = await self._request(
+                "POST",
+                "/answers",
+                params={"callback_id": callback_id},
+                json_body=payload,
+                chat_key=f"cb:{target_chat_id}" if target_chat_id else None,
+            )
+            return bool(data.get("success", True))
+        except ExternalIntegrationError as exc:
+            # Просроченный/повторный callback_id не должен ронять основной обработчик кнопки
+            logger.warning(
+                "MAX POST /answers non-fatal error for callback %s: %s", callback_id, exc
+            )
+            return False
 
     async def upload_image(self, data: bytes, filename: str) -> UploadedMedia:
         # Этап 1: получить одноразовый upload URL (type=image, type=photo удалён)
