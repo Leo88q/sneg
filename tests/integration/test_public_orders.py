@@ -46,6 +46,7 @@ async def test_public_catalog_and_live_quote_across_services(client: Any) -> Non
     cat = cat_resp.json()
 
     assert cat["brand_name"] == "ЧистоДвор"
+    assert cat["min_order_total_rub"] >= 1500
     assert cat["phone"] == "+7 (977) 924-02-93"
     assert len(cat["services"]) == 7
     zone_codes = {z["code"] for z in cat["zones"]}
@@ -291,3 +292,34 @@ async def test_staging_mode_hides_mock_payment_url_on_public_orders(
     data = resp.json()
     assert data["payment_mode"] == "dispatcher_confirm"
     assert data["payment_url"] is None
+
+
+@pytest.mark.asyncio
+async def test_quick_order_without_client_name_succeeds(client: Any) -> None:
+    """Упрощённая 3-шаговая форма позволяет заказать только по адресу и телефону (имя опционально)."""
+    http, container = client
+    resp = await http.post(
+        "/api/v1/public/orders",
+        json={
+            "service_type": "snow_yard",
+            "zone_code": "malakhovka",
+            "area_m2": 100,
+            "address_text": "ул. Быковская, д. 42",
+            "client_phone": "+7 (903) 777-88-99",
+            "consent_pdn": True,
+            "consent_offer": True,
+        },
+    )
+    assert resp.status_code == 201, resp.text
+    data = resp.json()
+    assert data["phone_last4"] == "8899"
+    assert data["zone_name"] == "Малаховка"
+
+    async with container.session_factory() as session:
+        user = (
+            await session.execute(
+                select(User).where(User.shared_contact_phone == "+79037778899")
+            )
+        ).scalar_one()
+        assert user.first_name == "Клиент"
+

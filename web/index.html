@@ -1,1040 +1,648 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="ru">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>ЧистоДвор · Уборка снега, расчистка участков и срочный выезд в МО</title>
-  <meta
-    name="description"
-    content="Онлайн-расчёт и заказ уборки снега во дворе, расчистки дорог, крыш, посыпки реагентами и помощи авто в Малаховке, Томилино, Красково, Быково и Лыткарино. Оплата СБП с чеком 54-ФЗ и фотоотчёт ДО/ПОСЛЕ."
-  />
-  <meta name="theme-color" content="#04101a" />
-  <meta property="og:type" content="website" />
-  <meta property="og:title" content="ЧистоДвор · Уборка снега, расчистка участков и срочный выезд в МО" />
-  <meta property="og:description" content="Онлайн-калькулятор с точностью до 50 ₽, оплата по СБП с чеком 54-ФЗ и фотоотчёт ДО/ПОСЛЕ." />
-  <meta property="og:image" content="/static/chistodvor-bot-logo.png" />
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ЧистоДвор — Уборка снега, выезд спецтехники и помощь по участку в Малаховке и Люберцах</title>
+  <meta name="description" content="ЧистоДвор — быстрая уборка снега во дворе и на дорогах, помощь застрявшим авто, расчистка крыш и уход за участком. Малаховка, Томилино, Красково, Быково, Лыткарино. Расчёт цены онлайн за 30 секунд." />
   <link rel="icon" href="/favicon.ico" sizes="any" />
   <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32x32.png" />
   <link rel="icon" type="image/png" sizes="192x192" href="/static/favicon-192x192.png" />
-  <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+  <meta property="og:title" content="ЧистоДвор — Уборка снега и уход за участком в Люберцах и Малаховке" />
+  <meta property="og:description" content="Расчёт стоимости за 30 секунд, выезд местных бригад, фотоотчёт ДО/ПОСЛЕ, оплата СБП с чеком 54-ФЗ." />
+  <meta property="og:image" content="/static/chistodvor-bot-logo.png" />
   <link rel="stylesheet" href="/static/fonts.css" />
   <link rel="stylesheet" href="/static/styles.css" />
   <style>
-    html {
-      scroll-behavior: smooth;
-    }
-
-    .page-shell {
-      max-width: 1220px;
-      margin: 0 auto;
-      padding: 28px 22px 64px;
-      display: grid;
-      gap: 44px;
-    }
-
-    /* Навигация в шапке */
-    .top-anchors {
-      display: flex;
-      align-items: center;
-      gap: 18px;
-      margin-right: 6px;
-    }
-
-    .top-anchors a {
-      font-size: 13px;
-      font-weight: 600;
-      color: var(--text-frost);
-      transition: color 0.15s ease;
-    }
-
-    .top-anchors a:hover {
-      color: var(--cryo);
-    }
-
-    .phone-pill {
-      display: inline-flex;
-      align-items: center;
-      gap: 7px;
-      padding: 6px 11px;
-      border-radius: 8px;
-      border: 1px solid var(--ice-edge);
-      background: rgba(140, 228, 255, 0.08);
-      color: var(--text-crystal);
-      font-family: var(--font-mono);
-      font-size: 12px;
-      font-weight: 600;
-      white-space: nowrap;
-    }
-
-    .phone-pill:hover {
-      border-color: var(--cryo);
-      color: #fff;
-    }
-
-    /* HERO */
+    /* ===== КАСТОМНАЯ ЗИМНЯЯ АТМОСФЕРА И УПРОЩЁННЫЙ ЗАКАЗ ===== */
     .hero-grid {
       display: grid;
-      grid-template-columns: 1.25fr 0.95fr;
-      gap: 20px;
-      align-items: stretch;
+      grid-template-columns: 1.16fr 0.84fr;
+      gap: 30px;
+      align-items: center;
+      padding: 46px 0 38px;
+      position: relative;
     }
 
-    .hero-main {
-      padding: 32px 30px;
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-      gap: 22px;
+    .winter-season-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 9px;
+      padding: 7px 14px;
+      border-radius: 999px;
+      background: linear-gradient(135deg, rgba(125, 226, 255, 0.14), rgba(56, 189, 248, 0.06));
+      border: 1px solid rgba(155, 234, 255, 0.34);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      letter-spacing: 0.1em;
+      color: var(--cryo);
+      box-shadow: 0 0 22px rgba(125, 226, 255, 0.14), inset 0 1px 0 rgba(255,255,255,0.22);
     }
+    .winter-flake-spin {
+      display: inline-flex;
+      color: #c2f4ff;
+      animation: spinFlake 18s linear infinite;
+    }
+    @keyframes spinFlake { to { transform: rotate(360deg); } }
 
     .hero-title {
-      font-size: clamp(27px, 3.6vw, 42px);
-      line-height: 1.1;
-      margin: 14px 0 14px;
-      font-weight: 800;
-      background: linear-gradient(180deg, #ffffff 0%, #cef0ff 68%, #7ed8fb 100%);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
+      font-size: clamp(32px, 4.4vw, 54px);
+      line-height: 1.07;
+      margin: 18px 0 16px;
+      letter-spacing: -0.025em;
     }
-
-    .hero-lead {
+    .hero-sub {
+      font-size: 16.5px;
+      line-height: 1.65;
       color: var(--text-frost);
-      font-size: 15px;
-      line-height: 1.62;
-      max-width: 58ch;
-      margin: 0;
+      max-width: 575px;
+      margin: 0 0 26px;
     }
-
-    .hero-actions {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-      align-items: center;
-    }
-
-    .hero-metrics {
+    .hero-actions { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+    .hero-proof {
       display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 10px;
-      padding-top: 16px;
-      border-top: 1px solid var(--ice-edge-soft);
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 11px;
+      margin-top: 26px;
     }
-
-    .metric-box .m-val {
+    .proof-chip {
+      padding: 13px 14px;
+      border-radius: var(--radius-md);
+      background: linear-gradient(155deg, rgba(16, 46, 70, 0.62), rgba(7, 24, 39, 0.72));
+      border: 1px solid rgba(155, 232, 255, 0.2);
+      box-shadow: inset 0 1px 0 rgba(235, 251, 255, 0.14);
+    }
+    .proof-chip strong {
+      display: block;
       font-family: var(--font-display);
-      font-size: 14.5px;
-      font-weight: 700;
+      font-size: 17px;
       color: var(--cryo);
+      margin-bottom: 3px;
     }
+    .proof-chip span { font-size: 12px; color: var(--text-muted); line-height: 1.35; display: block; }
 
-    .metric-box .m-lbl {
-      font-size: 11.5px;
-      color: var(--text-muted);
-      margin-top: 2px;
-      line-height: 1.35;
-    }
-
-    /* Правая карточка быстрого выбора */
-    .hero-quick {
+    /* Ледяная карточка быстрого выбора в Hero */
+    .hero-quick-card {
       padding: 24px;
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-      gap: 16px;
+      position: relative;
+      overflow: hidden;
+      background: linear-gradient(155deg, rgba(16, 48, 72, 0.8), rgba(6, 22, 36, 0.86));
+      border-color: rgba(156, 234, 255, 0.3);
+      box-shadow:
+        0 26px 65px rgba(1, 9, 17, 0.65),
+        inset 0 1px 0 rgba(235, 251, 255, 0.28),
+        0 0 42px rgba(96, 215, 255, 0.12);
     }
-
-    .quick-list {
-      display: grid;
-      gap: 9px;
-    }
-
-    .quick-tile {
-      width: 100%;
+    .quick-list { display: grid; gap: 9px; margin-top: 14px; }
+    .quick-item {
       display: flex;
-      justify-content: space-between;
       align-items: center;
+      justify-content: space-between;
       gap: 12px;
+      width: 100%;
       padding: 13px 15px;
+      border-radius: var(--radius-md);
+      border: 1px solid rgba(154, 230, 255, 0.18);
+      background: linear-gradient(135deg, rgba(18, 52, 78, 0.62), rgba(9, 28, 44, 0.62));
+      color: var(--text-snow);
       text-align: left;
-      border-radius: 11px;
-      border: 1px solid var(--ice-edge-soft);
-      background: rgba(5, 19, 32, 0.68);
-      color: var(--text-crystal);
       cursor: pointer;
-      transition: all 0.16s ease;
+      transition: transform 0.2s var(--ease-ice), border-color 0.2s, background 0.2s, box-shadow 0.2s;
     }
-
-    .quick-tile:hover {
-      border-color: var(--cryo);
-      background: rgba(140, 228, 255, 0.12);
-      transform: translateX(3px);
+    .quick-item:hover {
+      transform: translateY(-2px);
+      border-color: rgba(158, 236, 255, 0.56);
+      background: linear-gradient(135deg, rgba(28, 82, 118, 0.72), rgba(12, 39, 62, 0.72));
+      box-shadow: 0 10px 24px rgba(0, 12, 24, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.22);
     }
-
-    .quick-tile strong {
-      display: block;
-      font-size: 14px;
-      font-weight: 700;
-    }
-
-    .quick-tile small {
-      display: block;
-      font-size: 12px;
-      color: var(--text-muted);
-      margin-top: 2px;
-    }
-
-    .quick-price {
+    .quick-item-title { font-weight: 600; font-size: 14.5px; display: block; }
+    .quick-item-sub { font-size: 12px; color: var(--text-muted); margin-top: 2px; display: block; }
+    .quick-item-price {
       font-family: var(--font-mono);
-      font-size: 13px;
-      font-weight: 700;
+      font-size: 12.5px;
       color: var(--cryo);
       white-space: nowrap;
+      font-weight: 600;
     }
 
-    .zones-box {
-      padding-top: 12px;
-      border-top: 1px solid var(--ice-edge-soft);
+    /* ===== УПРОЩЁННЫЙ 3-ШАГОВЫЙ КАЛЬКУЛЯТОР И ЗАКАЗ ===== */
+    .order-section { padding: 14px 0 46px; }
+    .order-layout {
       display: grid;
-      gap: 9px;
-    }
-
-    .zone-strip {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-    }
-
-    /* Заголовки секций */
-    .sec-head {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-end;
-      gap: 16px;
-      flex-wrap: wrap;
-      margin-bottom: 18px;
-    }
-
-    .sec-head h2 {
-      margin: 8px 0 0;
-      font-size: clamp(21px, 2.6vw, 30px);
-      line-height: 1.15;
-    }
-
-    .sec-sub {
-      color: var(--text-frost);
-      font-size: 14px;
-      margin: 6px 0 0;
-      max-width: 64ch;
-    }
-
-    /* Панель проверки статуса заказа */
-    .track-drawer {
-      margin-bottom: 18px;
-      padding: 18px 20px;
-    }
-
-    .track-drawer[hidden] {
-      display: none !important;
-    }
-
-    .track-row {
-      display: flex;
-      gap: 10px;
-      flex-wrap: wrap;
-      align-items: flex-end;
-    }
-
-    .track-card {
-      margin-top: 12px;
-      padding: 13px 15px;
-      border-radius: 10px;
-      border: 1px solid var(--ice-edge);
-      background: rgba(5, 20, 34, 0.72);
-    }
-
-    /* КАЛЬКУЛЯТОР И ФОРМА ЗАКАЗА */
-    .order-grid {
-      display: grid;
-      grid-template-columns: 1.42fr 0.88fr;
-      gap: 20px;
+      grid-template-columns: minmax(0, 1.38fr) minmax(300px, 0.62fr);
+      gap: 24px;
       align-items: start;
     }
-
-    .order-panel {
-      padding: 26px;
+    .order-card {
+      padding: 28px;
+      position: relative;
+      overflow: hidden;
+      border-color: rgba(156, 234, 255, 0.28);
     }
 
-    .order-step {
-      padding-bottom: 22px;
-      margin-bottom: 22px;
-      border-bottom: 1px solid var(--ice-edge-soft);
-    }
-
-    .order-step:last-of-type {
-      border-bottom: 0;
-      margin-bottom: 16px;
-      padding-bottom: 0;
-    }
-
-    .step-title {
+    .step-header {
       display: flex;
       align-items: center;
-      gap: 10px;
-      margin: 0 0 14px;
-      font-family: var(--font-display);
-      font-size: 15px;
-      font-weight: 700;
+      gap: 11px;
+      margin: 26px 0 13px;
     }
-
+    .step-header:first-of-type { margin-top: 4px; }
     .step-num {
-      width: 26px;
-      height: 26px;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
       display: grid;
       place-items: center;
       font-family: var(--font-mono);
-      font-size: 12px;
+      font-size: 12.5px;
       font-weight: 700;
-      color: #031929;
-      background: linear-gradient(135deg, #d7f4ff 0%, #80dcff 100%);
-      clip-path: var(--cut-sm);
+      color: #031521;
+      background: linear-gradient(135deg, #c2f4ff, #38bdf8);
+      box-shadow: 0 0 18px rgba(125, 226, 255, 0.42);
       flex-shrink: 0;
     }
+    .step-header h3 { margin: 0; font-size: 16.5px; letter-spacing: -0.01em; }
 
-    /* Вкладки выбора услуги */
-    .svc-tabs-grid {
+    /* Шаг 1: 4 основные зимние карточки + компактные доп. чипы */
+    .service-primary-grid {
       display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 9px;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
     }
-
     .svc-tab {
       display: flex;
       align-items: center;
-      gap: 10px;
-      padding: 11px 12px;
-      border-radius: 10px;
-      border: 1px solid var(--ice-edge-soft);
-      background: rgba(5, 19, 32, 0.64);
+      gap: 12px;
+      padding: 13px 14px;
+      border-radius: var(--radius-md);
+      border: 1px solid rgba(154, 230, 255, 0.18);
+      background: linear-gradient(145deg, rgba(12, 37, 57, 0.68), rgba(7, 23, 37, 0.72));
       color: var(--text-frost);
       cursor: pointer;
       text-align: left;
-      transition: all 0.15s ease;
+      transition: all 0.2s var(--ease-ice);
     }
-
     .svc-tab:hover {
-      border-color: var(--ice-edge-strong);
-      color: #fff;
+      border-color: rgba(154, 234, 255, 0.46);
+      transform: translateY(-1px);
     }
-
     .svc-tab.active {
-      border-color: var(--cryo);
-      background: linear-gradient(135deg, rgba(140, 228, 255, 0.2), rgba(16, 62, 96, 0.72));
-      color: #fff;
-      box-shadow: 0 0 20px rgba(140, 228, 255, 0.16);
+      border-color: rgba(156, 236, 255, 0.78);
+      background: linear-gradient(145deg, rgba(56, 189, 248, 0.24), rgba(14, 52, 82, 0.85));
+      color: var(--text-snow);
+      box-shadow: 0 0 0 1px rgba(125, 226, 255, 0.25), 0 10px 26px rgba(20, 118, 172, 0.22);
     }
-
     .svc-tab-ico {
-      width: 34px;
-      height: 34px;
+      width: 36px;
+      height: 36px;
+      border-radius: 11px;
       display: grid;
       place-items: center;
-      border-radius: 8px;
-      background: rgba(140, 228, 255, 0.1);
+      background: rgba(125, 226, 255, 0.12);
       color: var(--cryo);
       flex-shrink: 0;
     }
-
-    .svc-tab-text strong {
-      display: block;
-      font-size: 12.5px;
-      line-height: 1.25;
+    .svc-tab.active .svc-tab-ico {
+      background: rgba(156, 236, 255, 0.24);
+      color: #ffffff;
     }
+    .svc-tab-text strong { display: block; font-size: 14px; font-weight: 600; line-height: 1.25; }
+    .svc-tab-text small { display: block; font-family: var(--font-mono); font-size: 11.5px; color: var(--cryo); margin-top: 2px; }
 
-    .svc-tab-text small {
-      display: block;
-      font-family: var(--font-mono);
-      font-size: 11px;
-      color: var(--cryo);
-      margin-top: 2px;
-    }
-
-    /* Динамические параметры */
-    .param-block {
-      margin-bottom: 15px;
-    }
-
-    .param-block:last-child {
-      margin-bottom: 0;
-    }
-
-    .param-row-head {
+    .service-secondary-row {
       display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 10px;
-      flex-wrap: wrap;
-      margin-bottom: 6px;
-    }
-
-    .preset-chips {
-      display: flex;
-      gap: 6px;
-      flex-wrap: wrap;
-    }
-
-    .preset-chip {
-      padding: 4px 9px;
-      border-radius: 6px;
-      border: 1px solid var(--ice-edge-soft);
-      background: rgba(140, 228, 255, 0.06);
-      color: var(--text-frost);
-      font-family: var(--font-mono);
-      font-size: 11px;
-      cursor: pointer;
-    }
-
-    .preset-chip:hover,
-    .preset-chip.active {
-      border-color: var(--cryo);
-      background: rgba(140, 228, 255, 0.18);
-      color: #fff;
-    }
-
-    .range-input-row {
-      display: flex;
-      gap: 12px;
-      align-items: center;
-    }
-
-    .range-input-row input[type="range"] {
-      flex: 1;
-      accent-color: #7ad8fb;
-      cursor: pointer;
-    }
-
-    .choice-pills {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 10px;
     }
-
-    .choice-pill {
-      padding: 9px 11px;
-      border-radius: 9px;
-      border: 1px solid var(--ice-edge-soft);
-      background: rgba(5, 19, 32, 0.64);
+    .svc-mini-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 7px 12px;
+      border-radius: 999px;
+      border: 1px solid rgba(154, 230, 255, 0.18);
+      background: rgba(9, 28, 44, 0.6);
       color: var(--text-frost);
-      text-align: left;
+      font-size: 12.5px;
       cursor: pointer;
-      transition: all 0.15s ease;
+      transition: all 0.18s var(--ease-ice);
     }
+    .svc-mini-chip small { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); }
+    .svc-mini-chip:hover { border-color: rgba(154, 234, 255, 0.45); color: var(--text-snow); }
+    .svc-mini-chip.active {
+      border-color: rgba(156, 236, 255, 0.72);
+      background: rgba(56, 189, 248, 0.22);
+      color: var(--text-snow);
+    }
+    .svc-mini-chip.active small { color: var(--cryo); }
 
-    .choice-pill span {
-      display: block;
+    /* Шаг 2: 1-клик карточки объёма + аккуратная шторка деталей */
+    .size-cards-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 9px;
+    }
+    .size-cards-grid.cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .size-card {
+      padding: 12px 14px;
+      border-radius: var(--radius-md);
+      border: 1px solid rgba(154, 230, 255, 0.18);
+      background: rgba(8, 25, 40, 0.65);
+      color: var(--text-frost);
+      cursor: pointer;
+      text-align: left;
+      transition: all 0.18s var(--ease-ice);
+    }
+    .size-card strong { display: block; font-size: 13.5px; font-weight: 600; color: var(--text-snow); }
+    .size-card span { display: block; font-size: 11.5px; color: var(--text-muted); margin-top: 2px; }
+    .size-card:hover { border-color: rgba(154, 234, 255, 0.44); }
+    .size-card.active {
+      border-color: rgba(156, 236, 255, 0.76);
+      background: linear-gradient(145deg, rgba(56, 189, 248, 0.22), rgba(11, 38, 60, 0.85));
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);
+    }
+    .size-card.active span { color: var(--cryo); }
+
+    /* Сворачиваемые шторки доп. опций (убираем перегруз вводных!) */
+    .details-drawer {
+      margin-top: 12px;
+      border-radius: var(--radius-md);
+      border: 1px dashed rgba(145, 224, 255, 0.24);
+      background: rgba(6, 20, 33, 0.45);
+      overflow: hidden;
+    }
+    .details-drawer summary {
+      list-style: none;
+      cursor: pointer;
+      padding: 11px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
       font-size: 13px;
-      font-weight: 600;
+      color: var(--text-frost);
+      user-select: none;
     }
-
-    .choice-pill small {
-      display: block;
+    .details-drawer summary::-webkit-details-marker { display: none; }
+    .details-drawer summary::before {
+      content: '❄';
+      color: var(--cryo);
+      font-size: 12px;
+      margin-right: 6px;
+    }
+    .details-drawer[open] summary {
+      border-bottom: 1px solid rgba(145, 224, 255, 0.14);
+      color: var(--text-snow);
+    }
+    .details-badge {
+      margin-left: auto;
       font-family: var(--font-mono);
       font-size: 11px;
-      color: var(--text-muted);
-      margin-top: 2px;
-    }
-
-    .choice-pill:hover {
-      border-color: var(--ice-edge-strong);
-      color: #fff;
-    }
-
-    .choice-pill.active {
-      border-color: var(--cryo);
-      background: rgba(140, 228, 255, 0.16);
-      color: #fff;
-    }
-
-    .choice-pill.active small {
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: rgba(125, 226, 255, 0.12);
       color: var(--cryo);
+      white-space: nowrap;
+    }
+    .details-body {
+      padding: 14px;
+      display: grid;
+      gap: 14px;
     }
 
-    .form-grid-2 {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 12px;
-      margin-bottom: 12px;
+    .param-block { display: grid; gap: 7px; }
+    .param-row-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .range-input-row { display: flex; align-items: center; gap: 12px; }
+    .choice-pills { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+    .choice-pill {
+      padding: 9px 10px;
+      border-radius: 12px;
+      border: 1px solid rgba(145, 222, 255, 0.2);
+      background: rgba(7, 23, 37, 0.7);
+      color: var(--text-frost);
+      cursor: pointer;
+      text-align: center;
+      transition: all 0.18s var(--ease-ice);
     }
+    .choice-pill span { display: block; font-size: 12.5px; font-weight: 600; }
+    .choice-pill small { display: block; font-size: 11px; color: var(--text-muted); margin-top: 1px; font-family: var(--font-mono); }
+    .choice-pill.active {
+      border-color: rgba(145, 232, 255, 0.72);
+      background: rgba(56, 189, 248, 0.22);
+      color: var(--text-snow);
+    }
+    .choice-pill.active small { color: var(--cryo); }
+
+    /* Шаг 3: Тактильные ледяные пилюли районов */
+    .zone-pills-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+    .zone-pick-pill {
+      padding: 9px 13px;
+      border-radius: 13px;
+      border: 1px solid rgba(145, 224, 255, 0.2);
+      background: rgba(8, 25, 40, 0.65);
+      color: var(--text-frost);
+      cursor: pointer;
+      text-align: left;
+      transition: all 0.18s var(--ease-ice);
+    }
+    .zone-pick-pill strong { display: block; font-size: 13px; font-weight: 600; color: var(--text-snow); }
+    .zone-pick-pill small { display: block; font-family: var(--font-mono); font-size: 10.5px; color: var(--text-muted); margin-top: 1px; }
+    .zone-pick-pill:hover { border-color: rgba(154, 234, 255, 0.48); }
+    .zone-pick-pill.active {
+      border-color: rgba(156, 236, 255, 0.78);
+      background: linear-gradient(145deg, rgba(56, 189, 248, 0.24), rgba(11, 38, 60, 0.88));
+    }
+    .zone-pick-pill.active small { color: var(--cryo); }
 
     .ice-check {
       display: flex;
       align-items: flex-start;
       gap: 10px;
-      padding: 10px 12px;
-      border-radius: 9px;
-      border: 1px solid var(--ice-edge-soft);
-      background: rgba(5, 19, 32, 0.52);
+      font-size: 13px;
       color: var(--text-frost);
-      font-size: 13px;
-      line-height: 1.45;
+      line-height: 1.5;
       cursor: pointer;
     }
+    .ice-check input { width: 17px; height: 17px; margin-top: 2px; accent-color: var(--cryo); flex-shrink: 0; }
+    .ice-check a { color: var(--cryo); text-decoration: underline; }
 
-    .ice-check input[type="checkbox"] {
-      width: 17px;
-      height: 17px;
-      margin-top: 2px;
-      accent-color: #7ad8fb;
-      flex-shrink: 0;
-      cursor: pointer;
-    }
-
-    .consent-group {
-      display: grid;
-      gap: 8px;
-      margin: 14px 0 18px;
-    }
-
-    .consent-group .ice-check {
-      font-size: 12px;
-      padding: 9px 11px;
-    }
-
-    .consent-group a {
-      text-decoration: underline;
-      text-underline-offset: 2px;
-    }
-
+    .form-grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
     .form-error {
-      padding: 11px 14px;
-      border-radius: 9px;
-      border: 1px solid rgba(255, 100, 127, 0.48);
-      background: rgba(255, 100, 127, 0.14);
-      color: #ffd5de;
-      font-size: 13px;
-      margin-bottom: 14px;
+      padding: 12px 14px;
+      border-radius: 12px;
+      border: 1px solid rgba(251, 113, 133, 0.5);
+      background: rgba(127, 29, 29, 0.3);
+      color: #ffd0d9;
+      font-size: 13.5px;
+      margin: 14px 0 0;
     }
 
-    .form-error[hidden] {
-      display: none !important;
-    }
-
-    /* Живой чек-расчёт (липкий справа) */
+    /* Правая ледяная квитанция */
     .quote-sticky {
       position: sticky;
-      top: 76px;
+      top: 86px;
       padding: 24px;
-      display: grid;
-      gap: 14px;
+      background: linear-gradient(165deg, rgba(16, 48, 72, 0.82), rgba(5, 19, 32, 0.88));
+      border-color: rgba(156, 234, 255, 0.32);
     }
-
-    .quote-head {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 10px;
-      padding-bottom: 12px;
-      border-bottom: 1px solid var(--ice-edge-soft);
-    }
-
-    .quote-lines {
-      display: grid;
-      gap: 9px;
-      font-size: 13.5px;
-    }
-
-    .q-line {
-      display: flex;
-      justify-content: space-between;
-      align-items: baseline;
-      gap: 12px;
-      color: var(--text-frost);
-    }
-
-    .q-line[hidden] {
-      display: none !important;
-    }
-
-    .q-line strong {
-      color: var(--text-crystal);
-      text-align: right;
-    }
-
+    .quote-lines { display: grid; gap: 10px; margin: 16px 0; padding: 14px 0; border-top: 1px solid rgba(150, 224, 255, 0.14); border-bottom: 1px solid rgba(150, 224, 255, 0.14); }
+    .quote-line { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; font-size: 13.5px; color: var(--text-frost); }
+    .quote-line strong { color: var(--text-snow); font-family: var(--font-mono); font-weight: 500; }
     .quote-total-box {
       padding: 15px 16px;
-      border-radius: 12px;
-      border: 1px solid var(--ice-edge-strong);
-      background: linear-gradient(145deg, rgba(140, 228, 255, 0.14), rgba(6, 26, 44, 0.78));
-      display: grid;
-      gap: 8px;
+      border-radius: var(--radius-md);
+      background: linear-gradient(135deg, rgba(56, 189, 248, 0.18), rgba(16, 48, 72, 0.45));
+      border: 1px solid rgba(156, 236, 255, 0.34);
     }
-
-    .q-total-main {
-      display: flex;
-      justify-content: space-between;
-      align-items: baseline;
-      gap: 12px;
-    }
-
-    .q-total-main .lbl {
-      font-size: 13px;
-      color: var(--text-frost);
-      font-weight: 600;
-    }
-
-    .q-total-main .sum {
+    .quote-total-val {
       font-family: var(--font-display);
-      font-size: 25px;
-      font-weight: 800;
-      color: var(--cryo);
+      font-size: 32px;
+      color: var(--text-snow);
+      margin-top: 4px;
+      letter-spacing: -0.02em;
     }
-
-    .q-split {
+    .quote-split {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 8px;
-      padding-top: 10px;
-      border-top: 1px solid var(--ice-edge-soft);
-    }
-
-    .q-split-item {
-      background: rgba(4, 16, 28, 0.56);
-      border-radius: 8px;
-      padding: 8px 10px;
-    }
-
-    .q-split-item span {
-      display: block;
-      font-size: 11px;
+      gap: 10px;
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid rgba(156, 234, 255, 0.18);
+      font-size: 12px;
       color: var(--text-muted);
     }
-
-    .q-split-item strong {
-      display: block;
-      font-family: var(--font-mono);
-      font-size: 14px;
-      margin-top: 2px;
-      color: var(--text-crystal);
-    }
-
+    .quote-split strong { display: block; font-family: var(--font-mono); font-size: 14px; color: var(--cryo); margin-top: 2px; }
     .quote-guarantees {
+      list-style: none;
+      margin: 15px 0 0;
+      padding: 0;
       display: grid;
       gap: 7px;
       font-size: 12.5px;
-      color: var(--text-frost);
+      color: var(--text-muted);
     }
+    .quote-guarantees li::before { content: '❄ '; color: var(--cryo); }
 
-    .quote-guarantees div {
-      display: flex;
-      align-items: flex-start;
-      gap: 8px;
+    /* Карточки каталога услуг */
+    .svc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
+    .svc-card { padding: 20px; display: flex; flex-direction: column; justify-content: space-between; gap: 16px; }
+    .svc-card-top { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 12px; }
+    .svc-card-icon {
+      width: 40px; height: 40px; border-radius: 12px;
+      display: grid; place-items: center;
+      background: rgba(125, 226, 255, 0.12);
+      border: 1px solid rgba(145, 224, 255, 0.25);
+      color: var(--cryo);
     }
+    .svc-card h3 { margin: 0 0 8px; font-size: 16px; }
+    .svc-card p { margin: 0; font-size: 13.5px; color: var(--text-muted); line-height: 1.55; }
+    .svc-card-foot { display: flex; justify-content: space-between; align-items: flex-end; gap: 10px; padding-top: 12px; border-top: 1px solid rgba(150, 224, 255, 0.12); }
+    .svc-price { font-family: var(--font-display); font-size: 17px; color: var(--cryo); }
+    .svc-min { font-size: 11.5px; color: var(--text-muted); margin-top: 2px; }
 
-    .quote-guarantees .dot {
-      color: var(--aurora-mint);
-      font-weight: 700;
-    }
+    /* Как работаем */
+    .steps-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+    .how-step { padding: 20px; }
+    .how-step .num { font-family: var(--font-mono); font-size: 12px; color: var(--cryo); margin-bottom: 8px; }
+    .how-step h3 { margin: 0 0 8px; font-size: 15px; }
+    .how-step p { margin: 0; font-size: 13px; color: var(--text-muted); line-height: 1.55; }
 
-    /* Экран подтверждения заказа */
     .success-summary-grid {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 10px;
-      margin-bottom: 16px;
+      margin-bottom: 18px;
     }
-
     .success-summary-grid > div {
       padding: 11px 13px;
-      border-radius: 10px;
-      border: 1px solid var(--ice-edge-soft);
-      background: rgba(5, 19, 32, 0.62);
-    }
-
-    .success-summary-grid span {
-      display: block;
-      font-size: 11px;
-      color: var(--text-muted);
-      margin-bottom: 3px;
-    }
-
-    .success-summary-grid strong {
-      font-size: 13.5px;
-    }
-
-    .success-action-box {
-      padding: 16px 18px;
       border-radius: 12px;
-      border: 1px solid rgba(66, 232, 176, 0.36);
-      background: rgba(66, 232, 176, 0.08);
+      background: rgba(7, 24, 38, 0.65);
+      border: 1px solid rgba(145, 222, 255, 0.14);
+    }
+    .success-summary-grid span { display: block; font-size: 11.5px; color: var(--text-muted); margin-bottom: 3px; }
+    .success-summary-grid strong { font-size: 14px; color: var(--text-snow); }
+    .success-action-box {
+      padding: 18px;
+      border-radius: var(--radius-md);
+      background: rgba(56, 189, 248, 0.1);
+      border: 1px solid rgba(125, 226, 255, 0.3);
     }
 
-    /* КАТАЛОГ ВСЕХ 7 УСЛУГ */
-    .services-grid {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 16px;
+    .track-bar { margin-top: 14px; padding: 18px 20px; }
+    .track-form { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
+    .track-card {
+      margin-top: 14px;
+      padding: 14px 16px;
+      border-radius: 12px;
+      background: rgba(7, 24, 38, 0.72);
+      border: 1px solid rgba(145, 224, 255, 0.2);
     }
 
-    .svc-card {
-      padding: 22px;
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-      gap: 18px;
-      transition: transform 0.18s ease, border-color 0.18s ease;
+    .site-footer {
+      margin-top: 56px;
+      padding: 30px 0 42px;
+      border-top: 1px solid rgba(155, 224, 255, 0.14);
     }
+    .footer-grid { display: grid; grid-template-columns: 1.2fr 1fr 1fr; gap: 24px; }
+    .footer-col h4 { margin: 0 0 10px; font-size: 13px; color: var(--cryo); letter-spacing: 0.05em; text-transform: uppercase; font-family: var(--font-mono); }
+    .footer-col p, .footer-col a { font-size: 13px; color: var(--text-muted); line-height: 1.7; }
+    .footer-links { display: grid; gap: 4px; }
+    .footer-links a:hover { color: var(--cryo); }
 
-    .svc-card:hover {
-      transform: translateY(-3px);
-      border-color: var(--ice-edge-strong);
+    @media (max-width: 980px) {
+      .hero-grid, .order-layout, .footer-grid { grid-template-columns: 1fr; }
+      .quote-sticky { position: static; }
+      .steps-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
-
-    .svc-card-top {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 10px;
-      margin-bottom: 14px;
-    }
-
-    .svc-card-icon {
-      width: 40px;
-      height: 40px;
-      display: grid;
-      place-items: center;
-      background: linear-gradient(135deg, rgba(168, 232, 255, 0.2), rgba(14, 58, 92, 0.45));
-      border: 1px solid var(--ice-edge-strong);
-      clip-path: var(--cut-sm);
-      color: var(--cryo);
-    }
-
-    .svc-card h3 {
-      margin: 0 0 8px;
-      font-size: 16.5px;
-      line-height: 1.25;
-    }
-
-    .svc-card p {
-      margin: 0;
-      color: var(--text-frost);
-      font-size: 13px;
-      line-height: 1.55;
-    }
-
-    .svc-card-foot {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-end;
-      gap: 12px;
-      padding-top: 14px;
-      border-top: 1px solid var(--ice-edge-soft);
-    }
-
-    .svc-price {
-      font-family: var(--font-display);
-      font-size: 16px;
-      font-weight: 700;
-      color: var(--cryo);
-    }
-
-    .svc-min {
-      font-family: var(--font-mono);
-      font-size: 11px;
-      color: var(--text-muted);
-      margin-top: 2px;
-    }
-
-    .neighbor-banner {
-      margin-top: 16px;
-      padding: 18px 22px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 16px;
-      flex-wrap: wrap;
-      border-color: rgba(106, 245, 200, 0.34);
-      background: linear-gradient(135deg, rgba(66, 232, 176, 0.12), rgba(7, 26, 42, 0.84));
-    }
-
-    /* КАК МЫ РАБОТАЕМ */
-    .steps-grid {
-      display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 14px;
-    }
-
-    .how-card {
-      padding: 20px;
-    }
-
-    .how-num {
-      font-family: var(--font-display);
-      font-size: 24px;
-      font-weight: 800;
-      color: var(--cryo);
-      opacity: 0.9;
-      margin-bottom: 10px;
-    }
-
-    .how-card h3 {
-      margin: 0 0 7px;
-      font-size: 15px;
-    }
-
-    .how-card p {
-      margin: 0;
-      font-size: 13px;
-      color: var(--text-frost);
-      line-height: 1.55;
-    }
-
-    /* FAQ */
-    .faq-list {
-      display: grid;
-      gap: 10px;
-    }
-
-    .faq-item {
-      padding: 0;
-    }
-
-    .faq-item summary {
-      padding: 16px 20px;
-      font-family: var(--font-display);
-      font-size: 14px;
-      font-weight: 600;
-      cursor: pointer;
-      list-style: none;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 12px;
-    }
-
-    .faq-item summary::-webkit-details-marker {
-      display: none;
-    }
-
-    .faq-item summary::after {
-      content: "+";
-      font-family: var(--font-mono);
-      font-size: 18px;
-      color: var(--cryo);
-      flex-shrink: 0;
-    }
-
-    .faq-item[open] summary::after {
-      content: "−";
-    }
-
-    .faq-body {
-      padding: 0 20px 16px;
-      font-size: 13.5px;
-      color: var(--text-frost);
-      line-height: 1.6;
-    }
-
-    /* КОМПАКТНЫЙ ПРОФЕССИОНАЛЬНЫЙ ФУТЕР */
-    .footer-grid {
-      display: grid;
-      grid-template-columns: 1.2fr 0.9fr 1.1fr;
-      gap: 20px;
-      padding-bottom: 16px;
-      border-bottom: 1px solid var(--ice-edge-soft);
-    }
-
-    .footer-col h4 {
-      margin: 0 0 8px;
-      font-family: var(--font-mono);
-      font-size: 11px;
-      letter-spacing: 0.09em;
-      text-transform: uppercase;
-      color: var(--cryo);
-    }
-
-    .footer-col p {
-      margin: 0 0 6px;
-      font-size: 12.5px;
-      color: var(--text-frost);
-      line-height: 1.55;
-    }
-
-    @media (max-width: 1024px) {
-      .hero-grid,
-      .order-grid,
-      .footer-grid {
+    @media (max-width: 640px) {
+      .hero-proof, .form-grid-2, .steps-grid, .success-summary-grid, .choice-pills, .service-primary-grid, .size-cards-grid, .size-cards-grid.cols-3 {
         grid-template-columns: 1fr;
       }
-      .quote-sticky {
-        position: static;
-      }
-      .services-grid {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-      }
-      .steps-grid {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-      }
-      .top-anchors {
-        display: none;
-      }
-    }
-
-    @media (max-width: 680px) {
-      .page-shell {
-        padding: 18px 14px 56px;
-        gap: 32px;
-      }
-      .hero-main,
-      .order-panel,
-      .quote-sticky {
-        padding: 20px 16px;
-      }
-      .hero-metrics {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-      }
-      .svc-tabs-grid,
-      .choice-pills,
-      .form-grid-2,
-      .services-grid,
-      .steps-grid,
-      .success-summary-grid {
-        grid-template-columns: 1fr;
-      }
-      .phone-pill {
-        display: none;
-      }
+      .order-card { padding: 18px; }
     }
   </style>
 </head>
 <body>
-  <header class="topbar">
-    <a class="brand" href="#">
-      <div class="brand-mark brand-mark-img" aria-hidden="true">
-        <img src="/static/brand-logo.png" alt="ЧистоДвор" width="38" height="38" />
-      </div>
-      <div class="brand-sub">
-        <span>ЧИСТОДВОР</span>
-        <small>УБОРКА СНЕГА И УЧАСТКОВ · МО</small>
-      </div>
-    </a>
+  <header class="top-nav">
+    <div class="nav-inner">
+      <a href="/" class="brand">
+        <span class="brand-mark brand-mark-img" aria-hidden="true">
+          <img src="/static/brand-logo.png" alt="ЧистоДвор" width="38" height="38" />
+        </span>
+        <span class="brand-name">
+          <strong>ЧИСТОДВОР</strong>
+          <span>МАЛАХОВКА · ЛЮБЕРЦЫ</span>
+        </span>
+      </a>
 
-    <div class="topbar-meta">
-      <nav class="top-anchors" aria-label="Разделы сайта">
-        <a href="#order">Калькулятор и заказ</a>
-        <a href="#services">Услуги и цены</a>
-        <a href="#how">Как работаем</a>
-        <a href="#faq">Вопросы</a>
+      <nav class="nav-links" aria-label="Навигация">
+        <a class="nav-link" href="#order">Заказать</a>
+        <a class="nav-link" href="#services">Услуги</a>
+        <a class="nav-link" href="#how">Как работаем</a>
+        <a class="nav-link" href="#contacts">Контакты</a>
       </nav>
 
-      <a class="phone-pill" href="tel:+79779240293">+7 (977) 924-02-93</a>
-      <a class="btn btn-primary btn-sm" href="#order">Заказать уборку</a>
-      <a class="btn btn-sm btn-ghost" data-sim-only href="/simulator" style="display:none">Симулятор</a>
-      <button class="btn btn-sm btn-ghost" onclick="toggleSnowFx(this)" title="Включить/выключить снег" aria-label="Переключить эффект снега">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-          <path d="M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6L5.6 18.4" />
-        </svg>
-      </button>
+      <div class="nav-actions">
+        <a class="btn btn-sm btn-ghost mono" href="tel:+79779240293">+7 (977) 924-02-93</a>
+        <button type="button" class="btn btn-sm" id="toggle-track-btn">Статус заказа</button>
+        <a class="btn btn-sm btn-primary" href="#order">Заказать уборку</a>
+        <button class="btn btn-sm btn-ghost" data-snow-toggle title="Переключить снегопад">❄ Снег: ВКЛ</button>
+      </div>
     </div>
   </header>
 
-  <main class="page-shell">
-    <!-- ====================================================================
-         1. ПЕРВЫЙ ЭКРАН: ПОНЯТНОЕ ПРЕДЛОЖЕНИЕ + БЫСТРЫЙ ВЫБОР УСЛУГИ
-         ==================================================================== -->
-    <section class="hero-grid">
-      <article class="ice-panel ice-interactive hero-main">
-        <div>
-          <div class="section-kicker">ВЫЕЗД БРИГАДЫ И ТЕХНИКИ · ЮГО-ВОСТОК МО</div>
-          <h1 class="hero-title">Уборка снега и участков с точной ценой до выезда</h1>
-          <p class="hero-lead">
-            Очистим двор, подъездную дорогу в СНТ, крышу, посыпем дорожки реагентами или
-            срочно вытащим застрявшую машину. Рассчитайте стоимость онлайн за 30 секунд —
-            цена фиксируется до выезда, оплата по СБП с кассовым чеком и фотоотчёт «ДО и ПОСЛЕ».
-          </p>
+  <main class="container">
+    <!-- Выдвижная панель проверки статуса заказа -->
+    <section id="track-drawer" class="ice-panel track-bar" hidden>
+      <form id="track-order-form" class="track-form">
+        <div style="flex:1;min-width:170px">
+          <label class="field-label" for="track-order-num">Номер заказа</label>
+          <input class="input mono" id="track-order-num" placeholder="Например, 1001" inputmode="numeric" />
         </div>
+        <div style="flex:1;min-width:170px">
+          <label class="field-label" for="track-phone-last4">Последние 4 цифры телефона</label>
+          <input class="input mono" id="track-phone-last4" maxlength="4" placeholder="0293" inputmode="numeric" />
+        </div>
+        <button type="submit" class="btn btn-primary">Проверить статус</button>
+      </form>
+      <div id="track-result" hidden></div>
+    </section>
+
+    <!-- HERO -->
+    <section class="hero-grid">
+      <div>
+        <div class="winter-season-tag">
+          <span class="winter-flake-spin" aria-hidden="true">❄</span>
+          <span>ЗИМНЯЯ ДИСПЕТЧЕРСКАЯ · МАЛАХОВКА И ЛЮБЕРЦЫ</span>
+        </div>
+        <h1 class="hero-title">
+          Расчистим двор и выезд от снега — <span class="ice-gradient-text">быстро и без сюрпризов</span>
+        </h1>
+        <p class="hero-sub">
+          Местные бригады и спецтехника рядом с вами. Выберите задачу в 3 клика,
+          увидьте точную цену сразу и получите фотоотчёт «ДО» и «ПОСЛЕ» работы.
+        </p>
 
         <div class="hero-actions">
-          <a class="btn btn-primary" href="#order">
-            Рассчитать и заказать →
-          </a>
-          <a class="btn" href="tel:+79779240293">
-            Позвонить +7 (977) 924-02-93
-          </a>
-          <a class="btn btn-success" data-max-bot-link href="#" target="_blank" rel="noopener" style="display:none">
-            Заказать в MAX-боте
-          </a>
+          <a class="btn btn-primary" href="#order">Заказать за 30 секунд →</a>
+          <a class="btn" href="tel:+79779240293">Позвонить диспетчеру</a>
+          <a class="btn btn-ghost" data-max-bot-link href="#" target="_blank" rel="noopener" style="display:none">Заказать в MAX</a>
         </div>
 
-        <div class="hero-metrics">
-          <div class="metric-box">
-            <div class="m-val">от 1 500 ₽</div>
-            <div class="m-lbl">Минимальный заказ без скрытых доплат</div>
+        <div class="hero-proof">
+          <div class="proof-chip">
+            <strong id="hero-min-price">от 1 500 ₽</strong>
+            <span>Честная цена до выезда бригады</span>
           </div>
-          <div class="metric-box">
-            <div class="m-val">до 50 ₽</div>
-            <div class="m-lbl">Прозрачное округление расчёта</div>
+          <div class="proof-chip">
+            <strong>Фото ДО / ПОСЛЕ</strong>
+            <span>Доплата только после результата</span>
           </div>
-          <div class="metric-box">
-            <div class="m-val">ДО / ПОСЛЕ</div>
-            <div class="m-lbl">Фотоотчёт и 24 ч на приёмку</div>
-          </div>
-          <div class="metric-box">
-            <div class="m-val">СБП + 54-ФЗ</div>
-            <div class="m-lbl">Официальный кассовый чек</div>
+          <div class="proof-chip">
+            <strong>Чек 54-ФЗ · СБП</strong>
+            <span>Официальный договор ИП</span>
           </div>
         </div>
-      </article>
+      </div>
 
-      <aside class="ice-panel ice-interactive hero-quick">
-        <div>
-          <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px">
-            <span class="section-kicker">ЧТО НУЖНО СДЕЛАТЬ?</span>
-            <div class="msk-clock">
-              <span class="pulse-dot"></span>
-              <span data-msk-clock>--:-- МСК</span>
-            </div>
-          </div>
+      <aside class="ice-panel hero-quick-card">
+        <svg class="frost-ornament" viewBox="0 0 180 180" fill="none" stroke="rgba(182,242,255,0.65)" stroke-width="1.1" aria-hidden="true">
+          <path d="M180 0 L120 60 M152 0 L152 44 M180 28 L136 28 M120 60 L92 60 M120 60 L120 88 M138 42 L118 22 M138 42 L158 62 M92 60 L78 46 M120 88 L134 102"/>
+          <circle cx="120" cy="60" r="3" fill="rgba(182,242,255,0.55)"/>
+          <circle cx="92" cy="60" r="2" fill="rgba(182,242,255,0.4)"/>
+          <circle cx="120" cy="88" r="2" fill="rgba(182,242,255,0.4)"/>
+        </svg>
 
-          <div class="quick-list">
-            <button type="button" class="quick-tile" data-quick-svc="snow_yard">
-              <div>
-                <strong>Уборка снега во дворе</strong>
-                <small>Дорожки, парковка, участок · вручную или техникой</small>
-              </div>
-              <span class="quick-price">от 25 ₽/м²</span>
-            </button>
+        <div class="section-kicker">БЫСТРЫЙ СТАРТ · 1 КЛИК</div>
+        <h2 style="margin:8px 0 4px;font-size:20px">Что расчистить сегодня?</h2>
+        <p style="margin:0;font-size:13px;color:var(--text-muted)">
+          Нажмите на задачу — сразу перейдём к расчёту и оформлению:
+        </p>
 
-            <button type="button" class="quick-tile" data-quick-svc="snow_road">
-              <div>
-                <strong>Расчистка дороги и проезда</strong>
-                <small>Улицы СНТ, подъезд к дому · мини-погрузчик / трактор</small>
-              </div>
-              <span class="quick-price">от 15 ₽/м²</span>
-            </button>
+        <div class="quick-list">
+          <button type="button" class="quick-item" data-quick-svc="snow_yard">
+            <span>
+              <span class="quick-item-title">Уборка снега во дворе</span>
+              <span class="quick-item-sub">Дорожки, парковка, крыльцо, участок</span>
+            </span>
+            <span class="quick-item-price" data-quick-price="snow_yard">от 25 ₽/м²</span>
+          </button>
 
-            <button type="button" class="quick-tile" data-quick-svc="car_rescue">
-              <div>
-                <strong>Срочно застряла машина</strong>
-                <small>Вызволим из сугроба и колеи · 5 км включено</small>
-              </div>
-              <span class="quick-price">от 2 500 ₽</span>
-            </button>
+          <button type="button" class="quick-item" data-quick-svc="snow_road">
+            <span>
+              <span class="quick-item-title">Расчистка дороги / проезда</span>
+              <span class="quick-item-sub">Улица СНТ, подъезд к воротам, техника</span>
+            </span>
+            <span class="quick-item-price" data-quick-price="snow_road">от 15 ₽/м²</span>
+          </button>
 
-            <button type="button" class="quick-tile" data-quick-svc="roof_cleaning">
-              <div>
-                <strong>Крыша, реагенты, помощь по двору</strong>
-                <small>Высотный допуск со страховкой · всесезонные работы</small>
-              </div>
-              <span class="quick-price">от 15 ₽/м²</span>
-            </button>
-          </div>
+          <button type="button" class="quick-item" data-quick-svc="car_rescue">
+            <span>
+              <span class="quick-item-title">Вытащить застрявшую машину</span>
+              <span class="quick-item-sub">Срочный экипаж · буксир и откапывание</span>
+            </span>
+            <span class="quick-item-price" data-quick-price="car_rescue">от 2 500 ₽</span>
+          </button>
+
+          <button type="button" class="quick-item" data-quick-svc="roof_cleaning">
+            <span>
+              <span class="quick-item-title">Очистка крыши от снега и наледи</span>
+              <span class="quick-item-sub">Частные дома, козырьки, сосульки</span>
+            </span>
+            <span class="quick-item-price" data-quick-price="roof_cleaning">от 90 ₽/м²</span>
+          </button>
         </div>
 
-        <div class="zones-box">
-          <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
-            <span class="field-label" style="margin:0">РАЙОНЫ ВЫЕЗДА СЕГОДНЯ</span>
-            <span style="font-size:11.5px;color:var(--text-muted)">07:00–22:00 · срочно 24/7</span>
-          </div>
-          <div class="zone-strip" id="hero-zones-list">
+        <div style="margin-top:16px;padding-top:13px;border-top:1px solid rgba(150,224,255,0.14)">
+          <div style="font-size:11px;font-family:var(--font-mono);color:var(--text-muted);margin-bottom:8px">ЗОНЫ БЫСТРОГО ВЫЕЗДА</div>
+          <div id="hero-zones-list" style="display:flex;gap:6px;flex-wrap:wrap">
             <span class="pill pill-blue">Малаховка</span>
             <span class="pill pill-blue">Томилино</span>
             <span class="pill pill-blue">Красково</span>
@@ -1045,400 +653,273 @@
       </aside>
     </section>
 
-    <!-- ====================================================================
-         2. КАЛЬКУЛЯТОР И ОНЛАЙН-ФОРМА ЗАКАЗА (ГЛАВНЫЙ РАБОЧИЙ БЛОК)
-         ==================================================================== -->
-    <section id="order">
-      <div class="sec-head">
-        <div>
-          <div class="section-kicker">ОНЛАЙН-ЗАЯВКА И КАЛЬКУЛЯТОР</div>
-          <h2>Рассчитайте цену и оформите заказ</h2>
-          <p class="sec-sub">
-            Стоимость пересчитывается мгновенно по действующим тарифам. Деньги при отправке формы
-            не списываются — вы сначала видите точную сумму аванса и остатка.
-          </p>
-        </div>
-        <button type="button" class="btn btn-sm" id="toggle-track-btn">
-          Проверить статус заказа
-        </button>
+    <!-- КАСТОМНЫЙ СНЕЖНЫЙ ГОРИЗОНТ-РАЗДЕЛИТЕЛЬ -->
+    <div class="snow-horizon" aria-hidden="true">
+      <svg viewBox="0 0 1200 44" preserveAspectRatio="none" width="100%" height="36">
+        <defs>
+          <linearGradient id="iceRidge" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stop-color="rgba(125,226,255,0)"/>
+            <stop offset="28%" stop-color="rgba(125,226,255,0.42)"/>
+            <stop offset="50%" stop-color="rgba(220,248,255,0.75)"/>
+            <stop offset="72%" stop-color="rgba(125,226,255,0.42)"/>
+            <stop offset="100%" stop-color="rgba(125,226,255,0)"/>
+          </linearGradient>
+        </defs>
+        <path d="M0,34 C190,10 320,40 520,20 C720,2 910,38 1200,14" fill="none" stroke="url(#iceRidge)" stroke-width="1.6"/>
+        <path d="M0,40 C260,24 440,42 680,26 C890,14 1050,36 1200,26 L1200,44 L0,44 Z" fill="rgba(125,226,255,0.045)"/>
+      </svg>
+    </div>
+
+    <!-- ГЛАВНАЯ УПРОЩЁННАЯ ФОРМА ЗАКАЗА (3 ШАГА) -->
+    <section id="order" class="order-section">
+      <div style="margin-bottom:20px">
+        <div class="section-kicker">БЫСТРЫЙ ЗАКАЗ · 3 ПРОСТЫХ ШАГА</div>
+        <h2 style="margin:6px 0 6px;font-size:clamp(24px,3vw,34px)">Рассчитать и вызвать бригаду</h2>
+        <p style="margin:0;color:var(--text-muted);font-size:15px">
+          Никаких длинных анкет: выберите услугу, объём, укажите адрес и телефон — диспетчер сразу подтвердит выезд.
+        </p>
       </div>
 
-      <!-- Скрываемая панель проверки статуса существующего заказа -->
-      <div class="ice-panel track-drawer" id="track-drawer" hidden>
-        <div class="section-kicker" style="margin-bottom:10px">СТАТУС ЗАКАЗА</div>
-        <form id="track-order-form" class="track-row">
-          <div style="flex:1 1 180px">
-            <label class="field-label" for="track-order-num">Номер заказа</label>
-            <input class="input mono" id="track-order-num" type="text" inputmode="numeric" placeholder="Например, 1001" />
-          </div>
-          <div style="flex:1 1 180px">
-            <label class="field-label" for="track-phone-last4">Последние 4 цифры телефона</label>
-            <input class="input mono" id="track-phone-last4" type="text" inputmode="numeric" maxlength="4" placeholder="Например, 0293" />
-          </div>
-          <button type="submit" class="btn btn-primary btn-sm">Найти заказ</button>
-        </form>
-        <div id="track-result" hidden></div>
-      </div>
+      <div class="order-layout">
+        <div class="ice-panel order-card">
+          <svg class="frost-ornament" viewBox="0 0 180 180" fill="none" stroke="rgba(182,242,255,0.45)" stroke-width="1" aria-hidden="true">
+            <path d="M180 0 L132 48 M158 0 L158 34 M180 22 L146 22 M132 48 L108 48 M132 48 L132 72"/>
+          </svg>
 
-      <div class="order-grid">
-        <!-- Левая колонка: пошаговая форма заказа -->
-        <div class="ice-panel order-panel">
+          <!-- Успешное оформление -->
+          <div id="order-success-panel" hidden></div>
+
+          <!-- Упрощённая 3-шаговая форма -->
           <div id="order-form-panel">
             <form id="public-order-form" novalidate>
-              <!-- Шаг 1 -->
-              <div class="order-step">
-                <h3 class="step-title">
-                  <span class="step-num">1</span>
-                  Выберите услугу
-                </h3>
-                <div class="svc-tabs-grid" id="service-selector-grid">
-                  <!-- Заполняется из /api/v1/public/catalog -->
-                </div>
+              <!-- ШАГ 1 -->
+              <div class="step-header">
+                <span class="step-num">1</span>
+                <h3>Что нужно сделать?</h3>
+              </div>
+              <div id="service-primary-grid" class="service-primary-grid"></div>
+              <div id="service-secondary-row" class="service-secondary-row"></div>
+
+              <!-- ШАГ 2 -->
+              <div class="step-header">
+                <span class="step-num">2</span>
+                <h3>Примерный объём работ</h3>
+              </div>
+              <div id="order-dynamic-params"></div>
+
+              <!-- ШАГ 3 -->
+              <div class="step-header">
+                <span class="step-num">3</span>
+                <h3>Куда приехать и номер телефона</h3>
               </div>
 
-              <!-- Шаг 2 -->
-              <div class="order-step">
-                <h3 class="step-title">
-                  <span class="step-num">2</span>
-                  Укажите параметры работы
-                </h3>
-                <div id="order-dynamic-params"></div>
-              </div>
+              <div id="order-zone-pills" class="zone-pills-grid"></div>
 
-              <!-- Шаг 3 -->
-              <div class="order-step">
-                <h3 class="step-title">
-                  <span class="step-num">3</span>
-                  Район и адрес выезда
-                </h3>
-                <div class="form-grid-2">
-                  <div>
-                    <label class="field-label" for="order-zone">Район</label>
-                    <select id="order-zone" name="zone_code">
-                      <option value="malakhovka">Малаховка (выезд 500 ₽)</option>
-                      <option value="tomilino">Томилино (выезд 500 ₽)</option>
-                      <option value="kraskovo">Красково (выезд 600 ₽)</option>
-                      <option value="bykovo">Быково (выезд 600 ₽)</option>
-                      <option value="lytkarino">Лыткарино (выезд 800 ₽)</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label class="field-label" for="order-address">Улица, дом / СНТ, участок *</label>
-                    <input
-                      class="input"
-                      id="order-address"
-                      name="address_text"
-                      type="text"
-                      required
-                      placeholder="ул. Центральная, д. 14 или СНТ Берёзка, уч. 25"
-                    />
-                  </div>
+              <div class="form-grid-2">
+                <div>
+                  <label class="field-label" for="order-address">Адрес (улица, дом или СНТ) *</label>
+                  <input class="input" id="order-address" placeholder="ул. Красковская, д. 15" required autocomplete="street-address" />
                 </div>
                 <div>
-                  <label class="field-label" for="order-comment">Комментарий для бригады (необязательно)</label>
-                  <input
-                    class="input"
-                    id="order-comment"
-                    name="client_comment"
-                    type="text"
-                    placeholder="Удобное время, код калитки, где складировать снег…"
-                  />
+                  <label class="field-label" for="order-phone">Телефон для связи *</label>
+                  <input class="input mono" id="order-phone" type="tel" placeholder="+7 (999) 123-45-67" required autocomplete="tel" />
                 </div>
               </div>
 
-              <!-- Шаг 4 -->
-              <div class="order-step">
-                <h3 class="step-title">
-                  <span class="step-num">4</span>
-                  Ваши контакты для связи и чека
-                </h3>
-                <div class="form-grid-2">
-                  <div>
-                    <label class="field-label" for="order-name">Как к вам обращаться *</label>
-                    <input class="input" id="order-name" name="client_name" type="text" required placeholder="Например, Анна" />
+              <details class="details-drawer">
+                <summary>
+                  <span>Добавить имя, комментарий для бригады или email для чека</span>
+                  <span class="details-badge">необязательно</span>
+                </summary>
+                <div class="details-body">
+                  <div class="form-grid-2">
+                    <div>
+                      <label class="field-label" for="order-name">Ваше имя</label>
+                      <input class="input" id="order-name" placeholder="Как к вам обращаться" autocomplete="name" />
+                    </div>
+                    <div>
+                      <label class="field-label" for="order-email">Email для чека 54-ФЗ</label>
+                      <input class="input" id="order-email" type="email" placeholder="name@example.ru" autocomplete="email" />
+                    </div>
                   </div>
                   <div>
-                    <label class="field-label" for="order-phone">Телефон *</label>
-                    <input
-                      class="input mono"
-                      id="order-phone"
-                      name="client_phone"
-                      type="tel"
-                      required
-                      placeholder="+7 (999) 123-45-67"
-                    />
+                    <label class="field-label" for="order-comment">Комментарий (код ворот, ориентир, время)</label>
+                    <input class="input" id="order-comment" placeholder="Например: ворота коричневые, лучше до 16:00" />
                   </div>
                 </div>
-                <div>
-                  <label class="field-label" for="order-email">Email для кассового чека 54-ФЗ (необязательно)</label>
-                  <input
-                    class="input"
-                    id="order-email"
-                    name="client_email"
-                    type="email"
-                    placeholder="name@example.ru (чек также может прийти по телефону)"
-                  />
-                </div>
-              </div>
+              </details>
 
-              <!-- Обязательные согласия (152-ФЗ, ЗоЗПП — компактно, по умолчанию сняты) -->
-              <div class="consent-group">
+              <div style="display:grid;gap:9px;margin-top:18px;padding-top:14px;border-top:1px solid rgba(150,224,255,0.14)">
                 <label class="ice-check">
-                  <input type="checkbox" id="order-consent-pdn" name="consent_pdn" />
-                  <span>
-                    Даю <a href="/legal/consent" target="_blank" rel="noopener">согласие на обработку персональных данных</a>
-                    и передачу контакта исполнителю в соответствии с
-                    <a href="/legal/privacy" target="_blank" rel="noopener">Политикой ПДн</a>.
-                  </span>
+                  <input type="checkbox" id="order-consent-pdn" required />
+                  <span>Даю <a href="/legal/consent" target="_blank">согласие на обработку ПДн</a> (<a href="/legal/privacy" target="_blank">Политика</a>)</span>
                 </label>
                 <label class="ice-check">
-                  <input type="checkbox" id="order-consent-offer" name="consent_offer" />
-                  <span>
-                    Принимаю условия <a href="/legal/offer" target="_blank" rel="noopener">Публичной оферты</a>
-                    и <a href="/legal/refunds" target="_blank" rel="noopener">правила возврата средств</a>.
-                  </span>
+                  <input type="checkbox" id="order-consent-offer" required />
+                  <span>Согласен с условиями <a href="/legal/offer" target="_blank">публичной оферты</a> ИП Холматов Л.И.</span>
                 </label>
               </div>
 
-              <div class="form-error" id="order-form-error" hidden role="alert"></div>
+              <div id="order-form-error" class="form-error" hidden></div>
 
-              <button type="submit" class="btn btn-primary" id="order-submit-btn" style="width:100%;padding:13px 18px;font-size:14.5px">
-                Оформить заказ
-              </button>
+              <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:18px">
+                <button type="submit" class="btn btn-primary" id="order-submit-btn" style="padding:14px 26px;font-size:15px">
+                  Заказать уборку
+                </button>
+                <span style="font-size:12px;color:var(--text-muted)">
+                  Без списания на этом шаге · Перезвоним за 10 мин
+                </span>
+              </div>
             </form>
           </div>
-
-          <!-- Панель подтверждения после отправки -->
-          <div id="order-success-panel" hidden></div>
         </div>
 
-        <!-- Правая липкая колонка: живой расчёт стоимости -->
+        <!-- Правая ледяная квитанция -->
         <aside class="ice-panel quote-sticky" aria-live="polite">
-          <div class="quote-head">
-            <span class="section-kicker">ПРЕДВАРИТЕЛЬНЫЙ РАСЧЁТ</span>
-            <span class="pill pill-green" id="quote-status-pill">ТОЧНЫЙ РАСЧЁТ</span>
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+            <span class="section-kicker" style="font-size:10.5px">ВАШ РАСЧЁТ</span>
+            <span class="pill pill-blue" id="quote-status-pill">ЦЕНА ДО ВЫЕЗДА</span>
           </div>
 
           <div class="quote-lines">
-            <div class="q-line">
+            <div class="quote-line">
               <span>Услуга</span>
-              <strong id="q-service-name">Уборка снега во дворе</strong>
+              <strong id="q-service-name" style="font-family:var(--font-sans);text-align:right">Уборка снега (двор)</strong>
             </div>
-            <div class="q-line">
+            <div class="quote-line">
               <span>Район</span>
-              <strong id="q-zone-name">Малаховка</strong>
+              <strong id="q-zone-name" style="font-family:var(--font-sans)">Малаховка</strong>
             </div>
-            <div class="q-line" id="q-method-row">
-              <span>Способ / техника</span>
-              <strong id="q-method-val">Автоподбор</strong>
+            <div class="quote-line" id="q-method-row">
+              <span>Способ</span>
+              <strong id="q-method-val" style="font-family:var(--font-sans)">Снегоуборщик</strong>
             </div>
-            <div class="q-line">
-              <span>Стоимость работ</span>
-              <strong class="mono" id="q-work-val">—</strong>
+            <div class="quote-line">
+              <span>Работа</span>
+              <strong id="q-work-val">—</strong>
             </div>
-            <div class="q-line">
+            <div class="quote-line" id="q-extras-row" hidden>
+              <span>Дополнительно</span>
+              <strong id="q-extras-val">0 ₽</strong>
+            </div>
+            <div class="quote-line">
               <span>Выезд бригады</span>
-              <strong class="mono" id="q-dispatch-val">—</strong>
-            </div>
-            <div class="q-line" id="q-extras-row" hidden>
-              <span>Доп. опции</span>
-              <strong class="mono" id="q-extras-val">0 ₽</strong>
+              <strong id="q-dispatch-val">—</strong>
             </div>
           </div>
 
           <div class="quote-total-box">
-            <div class="q-total-main">
-              <span class="lbl">Итого (до 50 ₽)</span>
-              <span class="sum" id="q-total-val">—</span>
+            <div style="font-size:11.5px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.08em;font-family:var(--font-mono)">
+              Ориентировочно итого
             </div>
-            <div class="q-split">
-              <div class="q-split-item">
+            <div class="quote-total-val" id="q-total-val">—</div>
+            <div class="quote-split">
+              <div>
                 <span id="q-advance-label">Аванс (30%)</span>
                 <strong id="q-advance-val">—</strong>
               </div>
-              <div class="q-split-item">
+              <div>
                 <span>Остаток после фото</span>
                 <strong id="q-remainder-val">—</strong>
               </div>
             </div>
           </div>
 
-          <div class="quote-guarantees">
-            <div><span class="dot">✓</span><span>Окончательная цена не меняется без вашего письменного согласования.</span></div>
-            <div><span class="dot">✓</span><span>100% возврат аванса по СБП при отмене до выезда бригады.</span></div>
-            <div><span class="dot">✓</span><span>Фотоотчёт «ДО и ПОСЛЕ» и кассовый чек 54-ФЗ на каждый платёж.</span></div>
-          </div>
+          <ul class="quote-guarantees">
+            <li>Цена известна заранее до начала работ</li>
+            <li>Фото «ДО» и «ПОСЛЕ» на каждый заказ</li>
+            <li>Оплата по СБП и кассовый чек 54-ФЗ</li>
+          </ul>
         </aside>
       </div>
     </section>
 
-    <!-- ====================================================================
-         3. ВСЕ УСЛУГИ И ПРОЗРАЧНЫЕ ТАРИФЫ
-         ==================================================================== -->
-    <section id="services">
-      <div class="sec-head">
-        <div>
-          <div class="section-kicker">ТАРИФЫ И УСЛУГИ</div>
-          <h2>Что мы выполняем на участке и в СНТ</h2>
-          <p class="sec-sub">
-            Работаем круглый год: зимой — уборка снега, крыш, проездов и вызволение авто;
-            в любой сезон — помощь по двору и грузчики.
-          </p>
-        </div>
+    <!-- КАТАЛОГ УСЛУГ -->
+    <section id="services" style="padding:26px 0 42px">
+      <div style="margin-bottom:20px">
+        <div class="section-kicker">ВСЕ УСЛУГИ ЧИСТОДВОР</div>
+        <h2 style="margin:6px 0 6px;font-size:clamp(24px,3vw,34px)">Зимняя уборка и помощь по участку</h2>
+        <p style="margin:0;color:var(--text-muted);font-size:15px">
+          Работаем круглый год — зимой снег и наледь, в тёплый сезон уборка территории, хозработы и грузчики.
+        </p>
       </div>
-
-      <div class="services-grid" id="catalog-services-grid">
-        <!-- Карточки подгружаются из действующего тарифа /api/v1/public/catalog -->
-      </div>
-
-      <div class="ice-panel neighbor-banner">
-        <div>
-          <div class="section-kicker" style="color:#9bfce0;margin-bottom:6px">ГРУППОВАЯ СКИДКА ДЛЯ СОСЕДЕЙ</div>
-          <div style="font-size:15px;font-weight:700;color:#fff">
-            Заказывайте уборку снега вместе с соседями по улице или СНТ — скидка 10% (от 2 участков) и 15% (от 3 участков)
-          </div>
-          <div style="font-size:13px;color:var(--text-frost);margin-top:4px">
-            Если в этот же день соседи оформляют заказ на вашу улицу, остаток к оплате пересчитывается автоматически.
-          </div>
-        </div>
-        <a class="btn btn-success btn-sm" href="#order">Рассчитать свой участок →</a>
-      </div>
+      <div id="catalog-services-grid" class="svc-grid"></div>
     </section>
 
-    <!-- ====================================================================
-         4. КАК ПРОХОДИТ РАБОТА
-         ==================================================================== -->
-    <section id="how">
-      <div class="sec-head">
-        <div>
-          <div class="section-kicker">ПРОЗРАЧНЫЙ ПРОЦЕСС</div>
-          <h2>Как проходит заказ — 4 понятных шага</h2>
-        </div>
+    <!-- КАК МЫ РАБОТАЕМ -->
+    <section id="how" style="padding:18px 0 38px">
+      <div style="margin-bottom:18px">
+        <div class="section-kicker">ПРОЗРАЧНЫЙ ПРОЦЕСС</div>
+        <h2 style="margin:6px 0 0;font-size:clamp(24px,3vw,32px)">Как проходит выезд</h2>
       </div>
-
       <div class="steps-grid">
-        <article class="ice-panel how-card">
-          <div class="how-num">01</div>
-          <h3>Онлайн-расчёт и заявка</h3>
-          <p>Указываете параметры в калькуляторе и сразу видите честную стоимость с точностью до 50 ₽.</p>
-        </article>
-        <article class="ice-panel how-card">
-          <div class="how-num">02</div>
-          <h3>Аванс СБП и выезд</h3>
-          <p>После подтверждения вносится аванс 30–50% по СБП с чеком 54-ФЗ — ближайшая бригада выезжает на объект.</p>
-        </article>
-        <article class="ice-panel how-card">
-          <div class="how-num">03</div>
-          <h3>Работа и фото «ДО / ПОСЛЕ»</h3>
-          <p>Исполнитель фиксирует состояние участка до начала работ и присылает фотоотчёт после завершения.</p>
-        </article>
-        <article class="ice-panel how-card">
-          <div class="how-num">04</div>
-          <h3>Приёмка и доплата</h3>
-          <p>У вас есть до 24 часов на проверку качества. После приёмки оплачиваете остаток по СБП с итоговым чеком.</p>
-        </article>
-      </div>
-    </section>
-
-    <!-- ====================================================================
-         5. ЧАСТЫЕ ВОПРОСЫ
-         ==================================================================== -->
-    <section id="faq">
-      <div class="sec-head">
-        <div>
-          <div class="section-kicker">ОТВЕТЫ НА ВОПРОСЫ</div>
-          <h2>Частые вопросы перед заказом</h2>
+        <div class="ice-panel how-step">
+          <div class="num">01 · ЗАЯВКА</div>
+          <h3>30 секунд онлайн</h3>
+          <p>Выберите услугу и объём — точный расчёт цены сразу на экране.</p>
+        </div>
+        <div class="ice-panel how-step">
+          <div class="num">02 · НАЗНАЧЕНИЕ</div>
+          <h3>Ближайшая бригада</h3>
+          <p>Диспетчер подтверждает время и закрепляет местных исполнителей.</p>
+        </div>
+        <div class="ice-panel how-step">
+          <div class="num">03 · ВЫПОЛНЕНИЕ</div>
+          <h3>Фото «ДО» и «ПОСЛЕ»</h3>
+          <p>Фиксируем состояние участка до начала и чистый результат после уборки.</p>
+        </div>
+        <div class="ice-panel how-step">
+          <div class="num">04 · РАСЧЁТ</div>
+          <h3>СБП и чек 54-ФЗ</h3>
+          <p>Окончательная доплата после приёмки работы, официальный чек от ИП.</p>
         </div>
       </div>
-
-      <div class="faq-list">
-        <details class="ice-panel faq-item" open>
-          <summary>Может ли цена вырасти, когда бригада уже приехала?</summary>
-          <div class="faq-body">
-            Нет, без вашего согласия цена не меняется. Если фактическая площадь или глубина снега
-            существенно отличается от указанной (более чем на 20%), исполнитель фиксирует это на фото
-            и отправляет вам уточнённую смету на согласование. Вы можете принять её или отказаться от работ.
-          </div>
-        </details>
-
-        <details class="ice-panel faq-item">
-          <summary>Как вернуть аванс, если планы изменились?</summary>
-          <div class="faq-body">
-            При отмене заказа до выезда бригады возвращаем 100% предоплаты на счёт СБП.
-            Если бригада уже выехала на адрес, удерживается только фактическая стоимость выезда (500–800 ₽),
-            а остаток возвращается. Полные правила описаны в разделе <a href="/legal/refunds">Условия возврата</a>.
-          </div>
-        </details>
-
-        <details class="ice-panel faq-item">
-          <summary>В каких районах вы работаете и сколько стоит выезд?</summary>
-          <div class="faq-body">
-            Сейчас обслуживаем Малаховку и Томилино (выезд 500 ₽), Красково и Быково (600 ₽),
-            Лыткарино (800 ₽). В ближайших планах — Октябрьский и Люберцы. Для услуги «Срочно застрял»
-            радиус 5 км от базы включён в базовую стоимость.
-          </div>
-        </details>
-
-        <details class="ice-panel faq-item">
-          <summary>Вы работаете официально? Предоставляете чеки?</summary>
-          <div class="faq-body">
-            Да. Оператор сервиса — ИП Холматов Леонид Икрамович (ИНН 231521684300, ОГРНИП 321344300084915, УСН).
-            Все платежи по СБП сопровождаются официальными кассовыми чеками по 54-ФЗ.
-          </div>
-        </details>
-
-        <details class="ice-panel faq-item">
-          <summary>Можно ли заказать в мессенджере MAX или подключиться как исполнитель?</summary>
-          <div class="faq-body">
-            Да, мы запускаем официального бота в российском мессенджере MAX для клиентов и самозанятых исполнителей (НПД).
-            Условия для исполнителей опубликованы в <a href="/legal/executor-offer">Оферте исполнителя</a>,
-            а для подключения позвоните по телефону <a href="tel:+79779240293">+7 (977) 924-02-93</a>.
-          </div>
-        </details>
-      </div>
     </section>
 
-    <!-- ====================================================================
-         КОМПАКТНЫЙ И АККУРАТНЫЙ ФУТЕР (РЕКВИЗИТЫ, КОНТАКТЫ, ДОКУМЕНТЫ РФ)
-         ==================================================================== -->
-    <footer class="ice-panel site-legal-footer">
+    <!-- ПОДВАЛ -->
+    <footer id="contacts" class="site-footer">
       <div class="footer-grid">
         <div class="footer-col">
-          <h4>ЧИСТОДВОР · ОПЕРАТОР</h4>
-          <p id="legal-footer-operator">
-            ИП Холматов Леонид Икрамович · ИНН 231521684300 · ОГРНИП 321344300084915 · УСН · 18+
+          <h4>ЧистоДвор</h4>
+          <p>
+            Сервис уборки снега, расчистки дорог, помощи автомобилям и работ по участку.<br/>
+            Малаховка · Томилино · Красково · Быково · Лыткарино (Люберецкий г.о., МО).
           </p>
-          <p class="mono" style="font-size:11px;color:var(--text-muted)" id="legal-footer-dc">
-            ЦОД на территории РФ (152-ФЗ) · без зарубежных трекеров
-          </p>
-        </div>
-
-        <div class="footer-col">
-          <h4>СВЯЗЬ И ДИСПЕТЧЕРСКАЯ</h4>
-          <p>Телефон: <a href="tel:+79779240293">+7 (977) 924-02-93</a></p>
-          <p>Почта: <a href="mailto:holmatovleonid25@gmail.com">holmatovleonid25@gmail.com</a></p>
-          <p style="margin-top:8px">
-            <a href="/admin" style="color:var(--text-muted)">Вход для диспетчера</a>
-            <span data-sim-only style="display:none"> · <a href="/simulator" style="color:var(--text-muted)">Симулятор MAX</a></span>
+          <p style="margin-top:10px">
+            <strong style="color:var(--text-snow)">ИП Холматов Леонид Икрамович</strong><br/>
+            ИНН <span class="mono">231521684300</span> · ОГРНИП <span class="mono">321344300084915</span>
           </p>
         </div>
 
         <div class="footer-col">
-          <h4>ДОКУМЕНТЫ И ЗАЩИТА ДАННЫХ</h4>
-          <div class="site-legal-links">
-            <a href="/legal/offer">Оферта клиента</a>
-            <a href="/legal/refunds">Возврат средств</a>
-            <a href="/legal/privacy">Политика ПДн</a>
-            <a href="/legal/consent">Согласие ПДн</a>
-            <a href="/legal/executor-offer">Исполнителям (НПД)</a>
-            <a href="/legal/cookies">Cookie</a>
-            <a href="/legal/requisites">Реквизиты и РКН</a>
-            <a href="/legal/licenses">Лицензии</a>
-            <a href="/legal">Сводка (20 п.)</a>
-            <a class="danger-link" href="/legal/my-data">Удалить мои данные</a>
-            <button type="button" onclick="window.openCookieSettings && window.openCookieSettings()">Настройки Cookie</button>
+          <h4>Контакты диспетчера</h4>
+          <div class="footer-links">
+            <a href="tel:+79779240293" class="mono" style="color:var(--cryo);font-size:15px">+7 (977) 924-02-93</a>
+            <a href="mailto:holmatovleonid25@gmail.com">holmatovleonid25@gmail.com</a>
+            <a data-max-bot-link href="#" target="_blank" rel="noopener" style="display:none">Написать в MAX-бот ЧистоДвор</a>
+            <span style="font-size:12px;color:var(--text-muted);margin-top:4px">Ежедневно · круглосуточный приём заявок</span>
           </div>
         </div>
+
+        <div class="footer-col">
+          <h4>Правовые документы (РФ)</h4>
+          <div class="footer-links">
+            <a href="/legal/requisites">Реквизиты и информация об исполнителе</a>
+            <a href="/legal/offer">Публичная оферта на оказание услуг</a>
+            <a href="/legal/privacy">Политика обработки персональных данных</a>
+            <a href="/legal/consent">Согласие на обработку ПДн</a>
+            <a href="/legal/my-data">Управление данными и отказ от рассылок</a>
+            <a href="/legal/cookies">Политика использования cookies</a>
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top:22px;padding-top:16px;border-top:1px solid rgba(155,224,255,0.08);display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--text-muted)">
+        <span>© 2026 ИП Холматов Л.И. · Все права защищены · Серверы и ПДн размещены в РФ</span>
+        <span style="display:flex;gap:14px">
+          <a href="/simulator" data-sim-only style="display:none;color:var(--text-muted)">Симулятор (DEV)</a>
+          <a href="/admin" style="color:var(--text-muted)">Вход для диспетчера</a>
+        </span>
       </div>
     </footer>
   </main>

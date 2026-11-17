@@ -3,9 +3,15 @@
    ============================================================================ */
 
 (function () {
-  // 1. Живой лёгкий снегопад и морозные кристаллы на фоне
+  // 1. Многослойный зимний снегопад: дальнее боке, ледяная крупа и вращающиеся 6-лучевые снежинки
   const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   let snowEnabled = localStorage.getItem('sneg_snow_fx') !== 'off' && !reduceMotion;
+  let pointerWind = 0;
+
+  window.addEventListener('pointermove', (e) => {
+    if (!window.innerWidth) return;
+    pointerWind = ((e.clientX / window.innerWidth) - 0.5) * 0.45;
+  });
 
   function initFrostCanvas() {
     let canvas = document.getElementById('frost-canvas');
@@ -18,57 +24,82 @@
     let w = (canvas.width = window.innerWidth);
     let h = (canvas.height = window.innerHeight);
 
-    const flakes = Array.from({ length: Math.min(72, Math.floor(w / 22)) }, () => ({
-      x: Math.random() * w,
-      y: Math.random() * h,
-      r: 0.7 + Math.random() * 2.1,
-      vy: 0.22 + Math.random() * 0.65,
-      vx: -0.25 + Math.random() * 0.5,
-      phase: Math.random() * Math.PI * 2,
-      crystal: Math.random() > 0.72,
-      alpha: 0.16 + Math.random() * 0.42,
-    }));
+    const total = Math.min(105, Math.max(46, Math.floor(w / 15)));
+    const flakes = Array.from({ length: total }, (_, idx) => {
+      const layer = idx % 5 === 0 ? 2 : idx % 3 === 0 ? 0 : 1; // 0=дальнее боке, 1=средний снег, 2=крупные снежинки
+      return {
+        layer,
+        x: Math.random() * w,
+        y: Math.random() * h,
+        r: layer === 2 ? 3.2 + Math.random() * 2.8 : layer === 0 ? 1.8 + Math.random() * 2.4 : 0.8 + Math.random() * 1.6,
+        vy: layer === 2 ? 0.48 + Math.random() * 0.55 : layer === 0 ? 0.16 + Math.random() * 0.25 : 0.32 + Math.random() * 0.48,
+        vx: -0.22 + Math.random() * 0.44,
+        phase: Math.random() * Math.PI * 2,
+        rot: Math.random() * Math.PI * 2,
+        vrot: (Math.random() - 0.5) * 0.014,
+        alpha: layer === 2 ? 0.28 + Math.random() * 0.36 : layer === 0 ? 0.08 + Math.random() * 0.14 : 0.18 + Math.random() * 0.38,
+      };
+    });
 
     window.addEventListener('resize', () => {
       w = canvas.width = window.innerWidth;
       h = canvas.height = window.innerHeight;
     });
 
-    function drawCrystal(x, y, r, alpha) {
+    function drawSnowflake(x, y, r, rot, alpha) {
       ctx.save();
       ctx.translate(x, y);
-      ctx.strokeStyle = `rgba(210, 244, 255, ${alpha})`;
-      ctx.lineWidth = 0.8;
-      for (let i = 0; i < 3; i++) {
+      ctx.rotate(rot);
+      ctx.strokeStyle = `rgba(218, 246, 255, ${alpha})`;
+      ctx.lineWidth = 0.85;
+      for (let i = 0; i < 6; i++) {
         ctx.beginPath();
-        ctx.moveTo(-r * 1.9, 0);
-        ctx.lineTo(r * 1.9, 0);
+        ctx.moveTo(0, 0);
+        ctx.lineTo(0, -r * 1.65);
+        // Боковые ледяные веточки снежинки
+        ctx.moveTo(0, -r * 0.95);
+        ctx.lineTo(-r * 0.42, -r * 1.32);
+        ctx.moveTo(0, -r * 0.95);
+        ctx.lineTo(r * 0.42, -r * 1.32);
         ctx.stroke();
         ctx.rotate(Math.PI / 3);
       }
       ctx.restore();
     }
 
+    let breezePhase = 0;
     function tick() {
       ctx.clearRect(0, 0, w, h);
       if (snowEnabled) {
+        breezePhase += 0.004;
+        const globalBreeze = Math.sin(breezePhase) * 0.28 + pointerWind;
         for (const f of flakes) {
-          f.phase += 0.012;
-          f.x += f.vx + Math.sin(f.phase) * 0.25;
+          f.phase += 0.011;
+          f.rot += f.vrot;
+          const layerWind = f.layer === 2 ? globalBreeze * 1.2 : f.layer === 0 ? globalBreeze * 0.35 : globalBreeze * 0.75;
+          f.x += f.vx + layerWind + Math.sin(f.phase) * 0.24;
           f.y += f.vy;
-          if (f.y > h + 10) {
-            f.y = -10;
+          if (f.y > h + 16) {
+            f.y = -16;
             f.x = Math.random() * w;
           }
-          if (f.x < -10) f.x = w + 10;
-          if (f.x > w + 10) f.x = -10;
+          if (f.x < -16) f.x = w + 16;
+          if (f.x > w + 16) f.x = -16;
 
-          if (f.crystal) {
-            drawCrystal(f.x, f.y, f.r, f.alpha * 0.9);
+          if (f.layer === 2) {
+            drawSnowflake(f.x, f.y, f.r, f.rot, f.alpha);
+          } else if (f.layer === 0) {
+            const g = ctx.createRadialGradient(f.x, f.y, 0, f.x, f.y, f.r * 2.4);
+            g.addColorStop(0, `rgba(190, 240, 255, ${f.alpha})`);
+            g.addColorStop(1, 'rgba(190, 240, 255, 0)');
+            ctx.fillStyle = g;
+            ctx.beginPath();
+            ctx.arc(f.x, f.y, f.r * 2.4, 0, Math.PI * 2);
+            ctx.fill();
           } else {
             ctx.beginPath();
             ctx.arc(f.x, f.y, f.r, 0, Math.PI * 2);
-            ctx.fillStyle = `rgba(220, 246, 255, ${f.alpha})`;
+            ctx.fillStyle = `rgba(226, 248, 255, ${f.alpha})`;
             ctx.fill();
           }
         }
