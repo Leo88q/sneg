@@ -37,6 +37,7 @@ from src.infra.db.models import (
     AdminAccount,
     AuditLog,
     BotChat,
+    DataSubjectRequest,
     Dispute,
     ExecutorProfile,
     GeoZone,
@@ -53,6 +54,7 @@ from src.infra.db.models import (
     Subscription,
     TariffConfig,
     User,
+    UserConsent,
     utcnow,
 )
 from src.services.messenger.base import MessageTarget, OutgoingMessage
@@ -1448,24 +1450,146 @@ async def send_broadcast(
         stmt = select(User).where(User.is_blocked.is_(False))
         if body.target_role != "all":
             stmt = stmt.where(User.role == body.target_role)
-        users = list((await session.execute(stmt)).scalars().all())
+        # Исключаем пользователей, отписавшихся от рассылок (38-ФЗ / 152-ФЗ)
+        unsubscribed_ids = set(
+            (
+                await session.execute(
+                    select(UserConsent.user_id).where(
+                        UserConsent.consent_type == "marketing_revoked"
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        users = [
+            u
+            for u in (await session.execute(stmt)).scalars().all()
+            if u.id not in unsubscribed_ids
+        ]
         await write_audit(
             session,
             admin=admin,
             action="broadcast.send",
             entity_type="broadcast",
             entity_id=body.target_role,
-            diff={"recipients": len(users)},
+            diff={"recipients": len(users), "excluded_unsubscribed": len(unsubscribed_ids)},
         )
         await session.commit()
+
+    outgoing_text = body.text
+    if "/unsubscribe" not in outgoing_text:
+        outgoing_text = (
+            f"{outgoing_text}\n\n—\nОтписаться от рассылок: отправьте /unsubscribe"
+        )
 
     sent = 0
     for u in users:
         await container.messenger.send_message(
-            MessageTarget(user_id=u.max_user_id), OutgoingMessage(text=body.text)
+            MessageTarget(user_id=u.max_user_id), OutgoingMessage(text=outgoing_text)
         )
         sent += 1
-    return {"sent": sent}
+    return {"sent": sent, "excluded_unsubscribed": len(unsubscribed_ids)}
+
+
+class ResolveDsrRequest(BaseModel):
+    status: str = Field(default="completed", pattern="^(completed|rejected)$")
+    anonymize_user: bool = False
+    resolution_note: str = Field(default="", max_length=1000)
+
+
+@router.get("/data-requests")
+async def list_data_requests(
+    _admin: AdminAccount = Depends(require_roles(AdminRole.ADMIN, AdminRole.OWNER)),
+    container: AppContainer = Depends(get_container),
+) -> list[dict[str, Any]]:
+    async with container.session_factory() as session:
+        rows = list(
+            (
+                await session.execute(
+                    select(DataSubjectRequest)
+                    .order_by(DataSubjectRequest.created_at.desc())
+                    .limit(100)
+                )
+            )
+            .scalars()
+            .all()
+        )
+    return [
+        {
+            "id": str(r.id),
+            "ticket_code": r.ticket_code,
+            "request_type": r.request_type,
+            "status": r.status,
+            "contact_value": r.contact_value,
+            "max_user_id": r.max_user_id,
+            "user_id": str(r.user_id) if r.user_id else None,
+            "details": r.details,
+            "source": r.source,
+            "resolution_note": r.resolution_note,
+            "created_at": r.created_at.isoformat(),
+            "resolved_at": r.resolved_at.isoformat() if r.resolved_at else None,
+        }
+        for r in rows
+    ]
+
+
+@router.post("/data-requests/{request_id}/resolve")
+async def resolve_data_request(
+    request_id: uuid.UUID,
+    body: ResolveDsrRequest,
+    request: Request,
+    admin: AdminAccount = Depends(require_roles(AdminRole.ADMIN, AdminRole.OWNER)),
+    container: AppContainer = Depends(get_container),
+) -> dict[str, Any]:
+    now = utcnow()
+    anonymized = False
+    async with container.session_factory() as session:
+        dsr = await session.get(DataSubjectRequest, request_id)
+        if dsr is None:
+            raise NotFoundError("Запрос субъекта ПДн не найден")
+
+        dsr.status = body.status
+        dsr.handled_by = admin.id
+        dsr.resolution_note = body.resolution_note.strip() or (
+            "Исполнено администратором по 152-ФЗ"
+            if body.status == "completed"
+            else "Отклонено администратором"
+        )
+        dsr.resolved_at = now
+
+        if body.status == "completed" and body.anonymize_user and dsr.user_id is not None:
+            user = await session.get(User, dsr.user_id)
+            if user is not None:
+                user.first_name = "Удалённый пользователь"
+                user.last_name = None
+                user.username = None
+                user.bot_phone = None
+                user.shared_contact_phone = None
+                user.email = None
+                user.updated_at = now
+                anonymized = True
+
+        await write_audit(
+            session,
+            admin=admin,
+            action="privacy.dsr_resolve",
+            entity_type="data_subject_request",
+            entity_id=str(dsr.id),
+            diff={
+                "ticket_code": dsr.ticket_code,
+                "status": dsr.status,
+                "anonymized": anonymized,
+            },
+            ip=request.client.host if request.client else None,
+        )
+        await session.commit()
+
+    return {
+        "id": str(request_id),
+        "status": body.status,
+        "anonymized": anonymized,
+    }
 
 
 @router.get("/audit-logs")

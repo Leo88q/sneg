@@ -23,6 +23,8 @@ async def ready(container: AppContainer = Depends(get_container)) -> dict[str, s
         await session.execute(text("SELECT 1"))
     return {
         "status": "ready",
+        "app_env": container.settings.app_env,
+        "simulator_enabled": "true" if container.settings.enable_simulator else "false",
         "messenger": container.settings.messenger_transport,
         "payment_provider": container.settings.payment_provider,
         "storage": container.settings.storage_provider,

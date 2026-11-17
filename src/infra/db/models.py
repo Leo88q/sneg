@@ -690,3 +690,35 @@ class SimulatorMessage(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow, onupdate=utcnow
     )
+
+
+class DataSubjectRequest(Base):
+    """Запросы субъектов ПДн (152-ФЗ ст. 14, 21: удаление, выгрузка, отзыв согласия, отписка)."""
+
+    __tablename__ = "data_subject_requests"
+    __table_args__ = (Index("idx_dsr_status_created", "status", "created_at"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    ticket_code: Mapped[str] = mapped_column(String(32), unique=True, nullable=False, index=True)
+    request_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending")
+    contact_value: Mapped[str] = mapped_column(String(255), nullable=False)
+    max_user_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    details: Mapped[str | None] = mapped_column(Text, nullable=True)
+    consent_accepted_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    age_confirmed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    source: Mapped[str] = mapped_column(String(32), nullable=False, default="web")
+    handled_by: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("admin_accounts.id", ondelete="SET NULL"), nullable=True
+    )
+    resolution_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
