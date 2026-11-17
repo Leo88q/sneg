@@ -40,6 +40,7 @@ class Settings(BaseSettings):
     max_global_rps: int = 25
     max_per_chat_rps: int = 2
     max_dispatch_chat_id: int | None = None
+    max_bot_url: str = ""
 
     # БД и Redis
     database_url: str = "sqlite+aiosqlite:///./var/sneg.db"
