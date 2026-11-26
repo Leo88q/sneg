@@ -134,6 +134,9 @@ class MarketplacePreviewRequest(BaseModel):
     total: Decimal
     schedule: PaymentSchedule
     final_payment_route: FinalPaymentRoute | None = None
+    rental_estimate: Decimal | None = Field(
+        default=None, ge=0, le=Decimal("9999999999.99"), decimal_places=2
+    )
 
 
 class GeoZoneCreateRequest(BaseModel):
@@ -1036,6 +1039,11 @@ async def preview_marketplace(
         "commission_percent": str(estimate.commission_percent),
         "commission": str(estimate.commission),
         "executor_after_commission": str(estimate.executor_after_commission),
+        "rental_estimate": str(body.rental_estimate) if body.rental_estimate is not None else None,
+        "after_commission_and_rental": (
+            str(estimate.executor_after_commission - body.rental_estimate)
+            if body.rental_estimate is not None else None
+        ),
         "schedule": plan.schedule.value,
         "upfront": str(plan.upfront),
         "after_completion": str(plan.after_completion),

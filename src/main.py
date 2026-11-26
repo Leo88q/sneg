@@ -15,6 +15,7 @@ from src.api.admin import media_router
 from src.api.admin import router as admin_router
 from src.api.health import router as health_router
 from src.api.legal import router as legal_router
+from src.api.marketplace_drafts import router as marketplace_drafts_router
 from src.api.mock_pay import router as mock_pay_router
 from src.api.public import router as public_router
 from src.api.simulator import router as simulator_router
@@ -92,6 +93,7 @@ def create_app(
     app.include_router(public_router)
     app.include_router(webhooks_router)
     app.include_router(admin_router)
+    app.include_router(marketplace_drafts_router)
     app.include_router(media_router)
     if cfg.payment_provider == "mock":
         app.include_router(mock_pay_router)

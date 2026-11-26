@@ -1461,7 +1461,7 @@ class BotRouter:
             await self.messenger.send_message(
                 MessageTarget(user_id=user.max_user_id),
                 OutgoingMessage(
-                    text="⚖️ **Спор открыт.** Бригадир и диспетчер уже получили уведомление и свяжутся с вами."
+                    text="⚖️ **Спор зарегистрирован.** Диспетчер рассмотрит обращение."
                 ),
             )
             return

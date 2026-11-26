@@ -18,6 +18,7 @@ from src.core.enums import (
     METHOD_LABELS,
     SERVICE_LABELS,
     STATUS_LABELS,
+    AdminRole,
     AssignmentRole,
     AssignmentStatus,
     ChatPurpose,
@@ -60,6 +61,7 @@ from src.domain.pricing.calculator import (
     to_decimal,
 )
 from src.infra.db.models import (
+    AdminAccount,
     BotChat,
     Dispute,
     ExecutorProfile,
@@ -1265,6 +1267,32 @@ class OrderOrchestrator:
         if len(data) > 20 * 1024 * 1024:
             raise ValidationAppError("Размер фото превышает 20 МБ")
 
+        # Проверяем права до загрузки файла в хранилище: идентификатор заказа не даёт доступ.
+        async with self.session_factory() as session:
+            order = await session.get(Order, order_id)
+            if order is None:
+                raise NotFoundError("Заказ не найден")
+            uploader = await session.get(User, uploader_user_id)
+            if uploader is None or uploader.is_blocked:
+                raise PermissionDeniedError("Доступ к загрузке фото запрещён")
+            assignment = (await session.execute(
+                select(OrderAssignment).where(
+                    OrderAssignment.order_id == order_id,
+                    OrderAssignment.executor_id == uploader_user_id,
+                    OrderAssignment.status.in_(ACTIVE_ASSIGNMENT_STATUSES),
+                )
+            )).scalar_one_or_none()
+            is_client = order.client_id == uploader_user_id
+            is_staff = uploader.role in (UserRole.FOREMAN.value, UserRole.ADMIN.value, UserRole.OWNER.value)
+            if stage == MediaStage.CLIENT_PROBLEM:
+                allowed = is_client
+            elif stage == MediaStage.DISPUTE:
+                allowed = is_client or assignment is not None or is_staff
+            else:
+                allowed = assignment is not None or is_staff
+            if not allowed:
+                raise PermissionDeniedError("У вас нет доступа к фото этого заказа")
+
         safe_name = "".join(ch for ch in filename if ch.isalnum() or ch in "._-") or "photo.jpg"
         storage_key = f"orders/{order_id}/{stage.value}/{uuid.uuid4().hex[:10]}_{safe_name}"
         stored = await self.storage.put_object(
@@ -1822,9 +1850,14 @@ class OrderOrchestrator:
     ) -> Dispute:
         foremen: list[User] = []
         async with self.session_factory() as session:
-            order = await session.get(Order, order_id)
+            stmt = select(Order).where(Order.id == order_id)
+            if not self.settings.is_sqlite:
+                stmt = stmt.with_for_update()
+            order = (await session.execute(stmt)).scalar_one_or_none()
             if order is None:
                 raise NotFoundError("Заказ не найден")
+            if order.client_id != opener_user_id:
+                raise PermissionDeniedError("Открыть спор может только клиент заказа")
             assert_order_transition(OrderStatus(order.status), OrderStatus.DISPUTED)
             old_st = order.status
             order.status = OrderStatus.DISPUTED.value
@@ -1886,10 +1919,38 @@ class OrderOrchestrator:
         discount_amount: Decimal = ZERO,
         refund_amount: Decimal = ZERO,
     ) -> Dispute:
+        allowed_resolutions = {
+            DisputeStatus.RESOLVED_REWORK,
+            DisputeStatus.RESOLVED_REFUND,
+            DisputeStatus.RESOLVED_DISCOUNT,
+            DisputeStatus.REJECTED,
+        }
+        if resolution not in allowed_resolutions or discount_amount < ZERO or refund_amount < ZERO:
+            raise ValidationAppError("Некорректное решение или сумма по спору")
         async with self.session_factory() as session:
-            dispute = await session.get(Dispute, dispute_id)
+            if admin_id is not None:
+                admin = await session.get(AdminAccount, admin_id)
+                role = admin.role if admin and admin.is_active else None
+            elif actor_user_id is not None:
+                actor = await session.get(User, actor_user_id)
+                role = actor.role if actor and not actor.is_blocked else None
+            else:
+                role = None
+            if role not in (AdminRole.FOREMAN.value, AdminRole.ADMIN.value, AdminRole.OWNER.value):
+                raise PermissionDeniedError("Решение спора доступно только диспетчеру")
+            if role == AdminRole.FOREMAN.value and (
+                resolution in (DisputeStatus.RESOLVED_REFUND, DisputeStatus.RESOLVED_DISCOUNT)
+                or discount_amount > ZERO or refund_amount > ZERO
+            ):
+                raise PermissionDeniedError("Денежное решение доступно только администратору")
+            stmt = select(Dispute).where(Dispute.id == dispute_id)
+            if not self.settings.is_sqlite:
+                stmt = stmt.with_for_update()
+            dispute = (await session.execute(stmt)).scalar_one_or_none()
             if dispute is None:
                 raise NotFoundError("Спор не найден")
+            if dispute.status not in (DisputeStatus.OPEN.value, DisputeStatus.IN_REVIEW.value):
+                raise InvalidStateTransitionError("Спор уже рассмотрен")
             order = await session.get(Order, dispute.order_id)
             if order is None:
                 raise NotFoundError("Заказ не найден")

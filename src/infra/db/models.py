@@ -722,3 +722,51 @@ class DataSubjectRequest(Base):
     )
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
+
+
+class MarketplaceDraft(Base):
+    """Внутренний черновик условий, не заказ и не договор."""
+
+    __tablename__ = "marketplace_drafts"
+    __table_args__ = (
+        CheckConstraint("revision >= 1", name="ck_marketplace_draft_revision"),
+        CheckConstraint("status IN ('draft', 'archived')", name="ck_marketplace_draft_status"),
+        Index("idx_marketplace_drafts_created", "created_at"),
+    )
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="draft")
+    revision: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    created_by: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("admin_accounts.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
+
+
+class MarketplaceDraftVersion(Base):
+    """Добавляемая версия предварительных условий без персональных данных."""
+
+    __tablename__ = "marketplace_draft_versions"
+    __table_args__ = (
+        UniqueConstraint("draft_id", "revision", name="uq_marketplace_draft_revision"),
+        CheckConstraint("revision >= 1", name="ck_marketplace_version_revision"),
+    )
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    draft_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("marketplace_drafts.id", ondelete="RESTRICT"), nullable=False
+    )
+    revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    model_version: Mapped[str] = mapped_column(String(32), nullable=False)
+    service_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    total: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    commission_pct: Mapped[Decimal] = mapped_column(Numeric(5, 2), nullable=False)
+    commission: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    executor_after_commission: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    schedule: Mapped[str] = mapped_column(String(32), nullable=False)
+    final_payment_route: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    upfront: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    after_completion: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    created_by: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("admin_accounts.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
