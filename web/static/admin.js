@@ -110,6 +110,7 @@ async function loadTab(tab) {
     else if (tab === 'executors') await renderExecutors(root);
     else if (tab === 'disputes') await renderDisputes(root);
     else if (tab === 'payouts') await renderPayouts(root);
+    else if (tab === 'marketplace') await renderMarketplacePreview(root);
     else if (tab === 'audit') await renderAudit(root);
     else if (tab === 'privacy') await renderPrivacyRequests(root);
   } catch (e) {
@@ -464,6 +465,85 @@ async function cancelOrd(orderId) {
   } catch (e) {
     toast('Ошибка: ' + e.message);
   }
+}
+
+async function renderMarketplacePreview(root) {
+  if (!currentAdmin || !['admin', 'owner'].includes(currentAdmin.role)) {
+    root.innerHTML = '<div class="ice-panel">Раздел доступен владельцу и администратору.</div>';
+    return;
+  }
+  root.innerHTML = `
+    <div class="page-head"><div>
+      <div class="section-kicker">ВНУТРЕННИЙ ПРОЕКТ · НЕ ДЕЙСТВУЮЩИЕ УСЛОВИЯ</div>
+      <h2>Новая модель: расчёт и макеты</h2>
+    </div><span class="pill pill-warn">ТОЛЬКО ПРОСМОТР</span></div>
+    <div class="ice-panel" style="display:grid;gap:14px;margin-bottom:16px">
+      <p>Это предварительная модель для одного исполнителя. Новые условия ещё не включены:
+      заказы, платежи и сообщения в MAX не создаются. Расчёты и документы требуют согласования.</p>
+      <form id="marketplace-form" style="display:grid;gap:12px">
+        <div class="split-2">
+          <div><label class="field-label" for="mp-total">Полная стоимость заказа, ₽</label>
+            <input class="input" id="mp-total" type="number" min="0.01" max="9999999999.99" step="0.01" value="10000" required /></div>
+          <div><label class="field-label" for="mp-schedule">График оплаты</label>
+            <select id="mp-schedule">
+              <option value="advance_27">Аванс 27%, остаток после работ</option>
+              <option value="full_upfront">Полная предоплата</option>
+              <option value="after_completion">Полностью после работ</option>
+            </select></div>
+        </div>
+        <div><label class="field-label" for="mp-route">Способ оплаты после работ</label>
+          <select id="mp-route">
+            <option value="payment_provider">Через платёжного партнёра</option>
+            <option value="direct_to_executor">Напрямую исполнителю</option>
+          </select></div>
+        <button class="btn btn-primary" type="submit">Рассчитать и показать макеты</button>
+      </form>
+      <div id="mp-result" aria-live="polite" style="font-size:14px"></div>
+    </div>
+  `;
+  const form = document.getElementById('marketplace-form');
+  const schedule = document.getElementById('mp-schedule');
+  const route = document.getElementById('mp-route');
+  const result = document.getElementById('mp-result');
+  let revision = 0;
+  form.addEventListener('input', () => {
+    revision++;
+    route.disabled = schedule.value === 'full_upfront';
+    result.textContent = '';
+  });
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const currentRevision = ++revision;
+    const request = {
+      total: document.getElementById('mp-total').value,
+      schedule: schedule.value,
+      final_payment_route: schedule.value === 'full_upfront' ? null : route.value,
+    };
+    result.textContent = 'Расчёт…';
+    try {
+      const data = await api('/api/v1/admin/marketplace/preview', {
+        method: 'POST', body: JSON.stringify(request),
+      });
+      if (!result.isConnected || currentRevision !== revision) return;
+      const rub = (amount) => `${esc(amount)} ₽`;
+      result.innerHTML = `
+        <div class="receipt-box" style="margin-top:8px">
+          <b>Предварительный расчёт</b><br>
+          Стоимость: ${rub(data.total)} · Комиссия 27%: ${rub(data.commission)}<br>
+          Исполнителю после комиссии: ${rub(data.executor_after_commission)} до налогов и расходов.<br>
+          Аванс: ${rub(data.upfront)} · После работ: ${rub(data.after_completion)}
+        </div>
+        ${[
+          ['Пример для сайта', data.site_example],
+          ['Пример для MAX-бота', data.bot_example],
+          ['Пример для группы MAX', data.group_example],
+        ].map(([label, text]) => `<div class="receipt-box" style="margin-top:10px"><b>${esc(label)}</b><div style="white-space:pre-wrap;margin-top:8px">${esc(text)}</div></div>`).join('')}
+        <p>Пример для группы не отправляется. Действующие заказы остаются на прежних условиях.</p>
+      `;
+    } catch (e) {
+      if (result.isConnected && currentRevision === revision) result.textContent = 'Ошибка расчёта: ' + e.message;
+    }
+  });
 }
 
 async function renderTariffs(root) {
