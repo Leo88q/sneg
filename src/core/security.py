@@ -54,8 +54,8 @@ def decode_admin_jwt(token: str, secret: str) -> dict[str, Any]:
 
 
 def verify_webhook_secret(expected: str, provided: str | None) -> bool:
-    if not expected:
-        return True
+    if not expected or not expected.strip():
+        return False
     if not provided:
         return False
     return hmac.compare_digest(expected.encode("utf-8"), provided.encode("utf-8"))

@@ -13,6 +13,7 @@
 | [`docs/04_marketplace_transition.md`](./docs/04_marketplace_transition.md) | План перехода к клиентскому сервису: выявленные расхождения, этапы и блокеры. Новая схема пока не включена. |
 | [`docs/06_release_readiness.md`](./docs/06_release_readiness.md) | Что усилено в действующей системе и что ещё блокирует запуск новой модели. |
 | [`docs/08_local_marketplace_simulation.md`](./docs/08_local_marketplace_simulation.md) | Новый тестовый сценарий и его ограничения. |
+| [`docs/09_operator_reconciliation_and_deploy.md`](./docs/09_operator_reconciliation_and_deploy.md) | Ручная проверка платежей и безопасная подготовка обновления сервера. |
 
 ## Реализованная архитектура
 
@@ -48,16 +49,9 @@ python3 -m venv .venv
 - **`/admin`** — веб-админка (dev-доступ: владелец `owner@sneg.local` / `admin12345`, бригадир `foreman@sneg.local` / `foreman12345`). Раздел «Новая модель · проект» доступен владельцу и администратору; это только предпросмотр, он не создаёт заказы, платежи или сообщения в MAX.
 - **`/docs`** — Swagger / OpenAPI 3.1
 
-## Запуск в production (Docker Compose + PostgreSQL 16 + Redis + ARQ + nginx)
+## Подготовка к развёртыванию
 
-```bash
-cp .env.example .env
-# Заполните MAX_BOT_TOKEN, MAX_WEBHOOK_SECRET, YOOKASSA_SHOP_ID, YOOKASSA_SECRET_KEY,
-# ADMIN_JWT_SECRET, PII_ENCRYPTION_KEY и переключите:
-# APP_ENV=production, MESSENGER_TRANSPORT=max, PAYMENT_PROVIDER=yookassa, ENABLE_SIMULATOR=false
-docker compose up -d --build
-docker compose exec api alembic upgrade head
-```
+Файлы Docker Compose — основа развёртывания, но их наличие не означает готовность к реальным заказам и платежам. Не копируйте `.env.example` поверх существующего `.env` и не включайте реальную ЮKassa или MAX без отдельной проверки настроек, резервных копий, юридической схемы и интеграций. План проверки текущего VPS, обновления и отката — в [`docs/09_operator_reconciliation_and_deploy.md`](./docs/09_operator_reconciliation_and_deploy.md). Список блокеров — в [`docs/06_release_readiness.md`](./docs/06_release_readiness.md).
 
 ## Проверка качества и тесты
 
