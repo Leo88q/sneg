@@ -109,13 +109,20 @@ async def test_dispute_and_media_cannot_be_controlled_by_other_users(
             note="нет",
             actor_user_id=foreman_id,
         )
-    resolved = await container.orchestrator.resolve_dispute(
-        dispute_id=dispute.id,
-        resolution=DisputeStatus.RESOLVED_REWORK,
-        note="Исправить",
-        actor_user_id=foreman_id,
+    await container.bot_router.handle_update(
+        {
+            "update_type": "message_callback",
+            "callback": {
+                "callback_id": "foreman-rework",
+                "payload": f"disp:rework:{dispute.id}",
+                "user": {"user_id": foreman.max_user_id, "first_name": "Бригадир"},
+            },
+            "message": {"recipient": {"chat_id": foreman.max_user_id, "chat_type": "dialog"}},
+        }
     )
-    assert resolved.status == DisputeStatus.RESOLVED_REWORK.value
+    async with container.session_factory() as session:
+        resolved = await session.get(Dispute, dispute.id)
+        assert resolved is not None and resolved.status == DisputeStatus.RESOLVED_REWORK.value
     with pytest.raises(InvalidStateTransitionError):
         await container.orchestrator.resolve_dispute(
             dispute_id=dispute.id,

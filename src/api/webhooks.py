@@ -6,7 +6,7 @@ import logging
 from decimal import Decimal
 from typing import Any
 
-from fastapi import APIRouter, Depends, Header, Request, Response
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
@@ -52,14 +52,19 @@ async def yookassa_webhook(
     event = container.payment_provider.parse_webhook(body)
     event_key = f"{event.event_type}:{event.provider_object_id}"
 
-    # Идемпотентность входящего вебхука
+    # Отметку о завершении нельзя записывать до проверки и применения события:
+    # сбой провайдера иначе приведёт к потере всех повторных уведомлений.
     async with container.session_factory() as session:
-        session.add(ProcessedWebhookEvent(source="yookassa", event_key=event_key))
-        try:
-            await session.commit()
-        except IntegrityError:
-            await session.rollback()
-            return Response(status_code=200)
+        existing = (
+            await session.execute(
+                select(ProcessedWebhookEvent.id).where(
+                    ProcessedWebhookEvent.source == "yookassa",
+                    ProcessedWebhookEvent.event_key == event_key,
+                )
+            )
+        ).scalar_one_or_none()
+    if existing is not None:
+        return Response(status_code=200)
 
     if event.event_type in ("payment.succeeded", "payment.canceled"):
         # Обязательная обратная перепроверка статуса через GET /v3/payments/{id}
@@ -68,21 +73,37 @@ async def yookassa_webhook(
         async with container.session_factory() as session:
             payment = (
                 await session.execute(
-                    select(Payment).where(
-                        Payment.provider_payment_id == event.provider_object_id
-                    )
+                    select(Payment).where(Payment.provider_payment_id == event.provider_object_id)
                 )
             ).scalar_one_or_none()
         if payment is None:
-            logger.warning("Payment %s not found in DB", event.provider_object_id)
-            return Response(status_code=200)
+            logger.error("Verified YooKassa payment %s not found locally", event.provider_object_id)
+            raise HTTPException(
+                status_code=503, detail="Платёж ещё не найден, повторите уведомление"
+            )
 
         if verified.currency != payment.currency or verified.amount != Decimal(payment.amount):
-            raise PaymentVerificationError("Несовпадение суммы или валюты платежа при проверке ЮKassa")
+            raise PaymentVerificationError(
+                "Несовпадение суммы или валюты платежа при проверке ЮKassa"
+            )
 
         if verified.status == "succeeded" and verified.paid:
             await container.orchestrator.confirm_payment_succeeded(payment.id)
         elif verified.status == "canceled":
             await container.orchestrator.cancel_payment(payment.id)
+        else:
+            raise HTTPException(status_code=503, detail="Платёж ещё не подтверждён провайдером")
+    else:
+        logger.warning(
+            "YooKassa event %s is not processed; manual reconciliation required", event.event_type
+        )
+        return Response(status_code=200)
+
+    async with container.session_factory() as session:
+        session.add(ProcessedWebhookEvent(source="yookassa", event_key=event_key))
+        try:
+            await session.commit()
+        except IntegrityError:
+            await session.rollback()
 
     return Response(status_code=200)

@@ -282,16 +282,30 @@ class BotRouter:
         password_arg: str,
     ) -> None:
         """Привязывает личный диалог или группу диспетчера для мгновенных уведомлений о новых заявках."""
+        if chat_type == "chat" and password_arg:
+            await self.messenger.send_message(
+                MessageTarget(chat_id=chat_id),
+                OutgoingMessage(text="⛔ Не отправляйте пароль в группу. Удалите сообщение и смените пароль; привязку выполните без пароля подтверждённым диспетчером."),
+            )
+            return
         async with self.session_factory() as session:
             user = await self._get_or_create_user(session, raw_sender, chat_id if chat_type == "dialog" else None)
-            is_privileged = user.role in (
+            is_privileged = not user.is_blocked and user.role in (
                 UserRole.OWNER.value,
                 UserRole.ADMIN.value,
                 UserRole.FOREMAN.value,
             )
+            if user.is_blocked or (chat_type == "chat" and not is_privileged):
+                await session.rollback()
+                target = MessageTarget(chat_id=chat_id) if chat_type == "chat" else MessageTarget(user_id=user.max_user_id)
+                await self.messenger.send_message(
+                    target,
+                    OutgoingMessage(text="⛔ Привязать чат может только подтверждённый диспетчер. Не отправляйте пароль в группу."),
+                )
+                return
 
-            password_ok = False
-            if password_arg:
+            matched_role: str | None = None
+            if password_arg and chat_type == "dialog" and not is_privileged:
                 admins = (
                     await session.execute(
                         select(AdminAccount).where(
@@ -302,10 +316,10 @@ class BotRouter:
                 ).scalars().all()
                 for acc in admins:
                     if verify_password(password_arg, acc.password_hash):
-                        password_ok = True
+                        matched_role = acc.role
                         break
 
-            if not is_privileged and not password_ok:
+            if not is_privileged and matched_role is None:
                 await session.commit()
                 target = (
                     MessageTarget(chat_id=chat_id)
@@ -323,10 +337,18 @@ class BotRouter:
                 )
                 return
 
-            if password_ok and user.role != UserRole.OWNER.value:
-                user.role = UserRole.OWNER.value
+            if matched_role is not None:
+                # Не повышаем администратора до владельца по чужому паролю.
+                user.role = matched_role
 
             chat = await session.get(BotChat, chat_id)
+            if chat_type == "chat" and chat is not None and chat.chat_purpose == ChatPurpose.DISPATCH_POOL.value:
+                await session.rollback()
+                await self.messenger.send_message(
+                    MessageTarget(chat_id=chat_id),
+                    OutgoingMessage(text="⛔ Чат рабочих нельзя использовать для уведомлений с персональными данными клиентов."),
+                )
+                return
             title = (
                 f"Личные уведомления владельца ({user.display_name})"
                 if chat_type == "dialog"
@@ -386,9 +408,27 @@ class BotRouter:
 
         # Групповой чат: поддерживаем привязку чата рабочих (/bind_dispatch_chat) и чата заявок (/bind_alerts_chat)
         if chat_type == "chat" and chat_id is not None:
-            if text.startswith("/bind_dispatch_chat"):
+            if text == "/bind_dispatch_chat":
                 async with self.session_factory() as session:
+                    sender_id = sender.get("user_id")
+                    authorized = (await session.execute(
+                        select(User).where(User.max_user_id == sender_id)
+                    )).scalar_one_or_none() if sender_id is not None else None
+                    if authorized is None or authorized.is_blocked or authorized.role not in (
+                        UserRole.OWNER.value, UserRole.ADMIN.value, UserRole.FOREMAN.value
+                    ):
+                        await self.messenger.send_message(
+                            MessageTarget(chat_id=int(chat_id)),
+                            OutgoingMessage(text="⛔ Привязать чат может только подтверждённый владелец или диспетчер."),
+                        )
+                        return
                     chat = await session.get(BotChat, int(chat_id))
+                    if chat is not None and chat.chat_purpose == ChatPurpose.FOREMAN_ALERTS.value:
+                        await self.messenger.send_message(
+                            MessageTarget(chat_id=int(chat_id)),
+                            OutgoingMessage(text="⛔ Чат уведомлений нельзя использовать как чат рабочих."),
+                        )
+                        return
                     if chat is None:
                         chat = BotChat(
                             chat_id=int(chat_id),
@@ -587,12 +627,16 @@ class BotRouter:
         payload = str(cb.get("payload", ""))
         raw_user = cb.get("user")
         msg = update.get("message", {})
-        chat_id = msg.get("recipient", {}).get("chat_id")
+        recipient = msg.get("recipient", {})
+        chat_id = recipient.get("chat_id")
         if not raw_user:
             return
 
         async with self.session_factory() as session:
-            user = await self._get_or_create_user(session, raw_user, chat_id)
+            # У MAX групповые chat_id тоже могут быть положительными.
+            # Не записываем групповой id в поле личного диалога пользователя.
+            direct_chat_id = chat_id if recipient.get("chat_type") == "dialog" else None
+            user = await self._get_or_create_user(session, raw_user, direct_chat_id)
             await session.commit()
 
         if user.is_blocked:
@@ -663,7 +707,7 @@ class BotRouter:
                     )
                 return
 
-            if ns == "disp":
+            if ns == "disp" and action in ("publish", "cancel"):
                 if user.role not in (
                     UserRole.OWNER.value,
                     UserRole.ADMIN.value,

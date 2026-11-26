@@ -11,6 +11,7 @@
 | [`docs/02_database_schema.sql`](./docs/02_database_schema.sql) | Эталонная DDL-схема PostgreSQL 16 (23 таблицы, enums, индексы и seed-данные). |
 | [`.env.example`](./.env.example) | Шаблон переменных окружения для локальной разработки и production-развёртывания. |
 | [`docs/04_marketplace_transition.md`](./docs/04_marketplace_transition.md) | План перехода к клиентскому сервису: выявленные расхождения, этапы и блокеры. Новая схема пока не включена. |
+| [`docs/06_release_readiness.md`](./docs/06_release_readiness.md) | Что усилено в действующей системе и что ещё блокирует запуск новой модели. |
 
 ## Реализованная архитектура
 

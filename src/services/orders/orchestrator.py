@@ -126,6 +126,7 @@ class OrderOrchestrator:
         self.storage = storage
         # Локальные блокировки гарантируют атомарность «Беру» на SQLite и дополняют FOR UPDATE на PG
         self._order_locks: dict[uuid.UUID, asyncio.Lock] = defaultdict(asyncio.Lock)
+        self._payment_processing_lock = asyncio.Lock()
         self._pub_num_lock = asyncio.Lock()
 
     async def _notify_max_user(self, max_user_id: int | None, msg: OutgoingMessage) -> None:
@@ -157,6 +158,7 @@ class OrderOrchestrator:
                     BotChat.chat_purpose == ChatPurpose.DISPATCH_POOL.value,
                     BotChat.is_active.is_(True),
                 )
+                .order_by(BotChat.updated_at.desc(), BotChat.chat_id.desc())
                 .limit(1)
             )
         ).scalar_one_or_none()
@@ -722,19 +724,27 @@ class OrderOrchestrator:
         executors_to_notify: list[tuple[User, Decimal]] = []
         transitioned_to: OrderStatus | None = None
 
-        async with self.session_factory() as session:
-            payment = await session.get(Payment, payment_id)
+        async with self._payment_processing_lock, self.session_factory() as session:
+            payment_stmt = select(Payment).where(Payment.id == payment_id)
+            if not self.settings.is_sqlite:
+                payment_stmt = payment_stmt.with_for_update()
+            payment = (await session.execute(payment_stmt)).scalar_one_or_none()
             if payment is None:
                 raise NotFoundError("Платёж не найден")
 
-            order = await session.get(Order, payment.order_id) if payment.order_id else None
+            order = None
+            if payment.order_id:
+                order_stmt = select(Order).where(Order.id == payment.order_id)
+                if not self.settings.is_sqlite:
+                    order_stmt = order_stmt.with_for_update()
+                order = (await session.execute(order_stmt)).scalar_one_or_none()
 
             if payment.status == PaymentStatus.SUCCEEDED.value:
                 return payment, order
 
             payment.status = PaymentStatus.SUCCEEDED.value
             payment.paid_at = utcnow()
-            payment.receipt_status = "issued"
+            # Успешная оплата сама по себе не подтверждает выдачу фискального чека.
 
             if order is None:
                 await session.commit()
@@ -860,8 +870,11 @@ class OrderOrchestrator:
         return payment, order
 
     async def cancel_payment(self, payment_id: uuid.UUID) -> Payment:
-        async with self.session_factory() as session:
-            payment = await session.get(Payment, payment_id)
+        async with self._payment_processing_lock, self.session_factory() as session:
+            stmt = select(Payment).where(Payment.id == payment_id)
+            if not self.settings.is_sqlite:
+                stmt = stmt.with_for_update()
+            payment = (await session.execute(stmt)).scalar_one_or_none()
             if payment is None:
                 raise NotFoundError("Платёж не найден")
             if payment.status == PaymentStatus.PENDING.value:
