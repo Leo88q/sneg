@@ -110,12 +110,47 @@ async function loadTab(tab) {
     else if (tab === 'executors') await renderExecutors(root);
     else if (tab === 'disputes') await renderDisputes(root);
     else if (tab === 'payouts') await renderPayouts(root);
+    else if (tab === 'reconciliation') await renderReconciliation(root);
     else if (tab === 'marketplace') await renderMarketplacePreview(root);
     else if (tab === 'audit') await renderAudit(root);
     else if (tab === 'privacy') await renderPrivacyRequests(root);
   } catch (e) {
     root.innerHTML = `<div class="ice-panel"><span class="pill pill-red">ОШИБКА</span> <span style="margin-left:8px">${esc(e.message)}</span></div>`;
   }
+}
+
+const reconciliationLabels = {
+  paid_amount_mismatch: 'Сумма заказа не совпадает с успешными платежами в БД',
+  canceled_order_with_unreturned_payment: 'Отменённый заказ: оплата превышает возвраты в БД',
+  canceled_order_with_pending_payment: 'Отменённый заказ: есть ожидающий платёж',
+  expired_payment_pending: 'Истёк локальный срок ожидающего платежа',
+  payment_missing_provider_id: 'Не указан идентификатор платежа провайдера',
+  receipt_requires_external_check: 'Проверить чек у фискального провайдера',
+  refund_requires_external_check: 'Возврат требует проверки у провайдера',
+  refund_status_not_supported_by_records: 'Статус возврата не подтверждён записями БД',
+  refund_exceeds_or_mismatches_payment: 'Возврат превышает платёж или не совпадает с ним',
+};
+let reconciliationBefore = null;
+async function renderReconciliation(root, before = null) {
+  if (!currentAdmin || !['admin', 'owner'].includes(currentAdmin.role)) {
+    root.innerHTML = '<div class="ice-panel">Раздел доступен владельцу и администратору.</div>';
+    return;
+  }
+  reconciliationBefore = before;
+  const d = await api('/api/v1/admin/reconciliation/orders' + (before ? `?before=${encodeURIComponent(before)}` : ''));
+  const rows = d.items.map(o => `<tr>
+    <td class="mono"><b>#${esc(o.public_number)}</b><br>${esc(o.order_status)} / ${esc(o.payment_status)}</td>
+    <td>${o.issues.map(code => `<div>• ${esc(reconciliationLabels[code] || code)}</div>`).join('')}</td>
+    <td>В заказе: ${esc(o.order_paid)} ₽<br>Платежи в БД: ${esc(o.recorded_paid)} ₽<br>Возвраты в БД: ${esc(o.recorded_refunded)} ₽</td>
+    <td><button class="btn btn-sm" onclick="openOrder('${esc(o.order_id)}')">Открыть заказ</button></td>
+  </tr>`).join('');
+  root.innerHTML = `<div class="page-head"><div><div class="section-kicker">ОПЕРАТОРСКАЯ ПРОВЕРКА</div><h2>Сверка платежей</h2></div>
+    <button class="btn btn-sm" onclick="renderReconciliation(document.getElementById('admin-content'), reconciliationBefore)">↻ Обновить</button></div>
+    <div class="ice-panel"><p><b>Только локальные данные БД.</b> Это не сверка с ЮKassa или кассой. Проверяйте первичные данные и чеки у провайдера; ручной возврат не синхронизируется автоматически.</p>
+    <p>Проверено заказов на странице: ${esc(d.scanned)}. Страница без предупреждений не означает отсутствие проблем у провайдера. Для проверки старых заказов переходите дальше.</p>
+    <div class="table-wrap"><table><thead><tr><th>Заказ</th><th>Что проверить</th><th>Записи в БД</th><th></th></tr></thead><tbody>${rows || '<tr><td colspan="4">В проверенных записях предупреждений нет.</td></tr>'}</tbody></table></div>
+    <div style="display:flex;gap:8px;margin-top:14px"><button class="btn btn-sm" onclick="renderReconciliation(document.getElementById('admin-content'))">К новым заказам</button>
+    ${d.next_before ? `<button class="btn btn-sm" onclick="renderReconciliation(document.getElementById('admin-content'), ${Number(d.next_before)})">Более старые заказы →</button>` : ''}</div></div>`;
 }
 
 async function renderDashboard(root) {
@@ -132,7 +167,7 @@ async function renderDashboard(root) {
       </tr>`
         )
         .join('')
-    : '<tr><td colspan="5" style="color:var(--text-muted);text-align:center;padding:22px">Критических инцидентов нет — всё работает в штатном зимнем режиме.</td></tr>';
+    : '<tr><td colspan="5" style="color:var(--text-muted);text-align:center;padding:22px">В этом списке нет заказов для внимания. Отдельно проверяйте платежи, уведомления и состояние сервиса.</td></tr>';
 
   root.innerHTML = `
     <div class="page-head">

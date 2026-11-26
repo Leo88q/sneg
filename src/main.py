@@ -21,6 +21,7 @@ from src.api.marketplace_simulator import _state as simulation_state
 from src.api.marketplace_simulator import router as marketplace_simulator_router
 from src.api.mock_pay import router as mock_pay_router
 from src.api.public import router as public_router
+from src.api.reconciliation import router as reconciliation_router
 from src.api.simulator import router as simulator_router
 from src.api.webhooks import router as webhooks_router
 from src.core.config import Settings, get_settings
@@ -71,13 +72,15 @@ def create_app(
     app.state.container = container
     app.state.marketplace_simulation = Simulation()
 
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["*"],
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
+    # The web UI is same-origin; cross-origin access is opt-in, never wildcard.
+    if cfg.cors_origins:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=cfg.cors_origins,
+            allow_credentials=True,
+            allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+            allow_headers=["Content-Type", "Authorization"],
+        )
 
     @app.exception_handler(AppError)
     async def app_error_handler(_request: Request, exc: AppError) -> JSONResponse:
@@ -97,6 +100,7 @@ def create_app(
     app.include_router(public_router)
     app.include_router(webhooks_router)
     app.include_router(admin_router)
+    app.include_router(reconciliation_router)
     app.include_router(marketplace_drafts_router)
     app.include_router(marketplace_simulator_router)
     app.include_router(media_router)

@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     timezone: str = "Europe/Moscow"
     secret_key: str = "dev-secret-key-change-me-in-production-0123456789abcdef"
     log_level: str = "INFO"
+    # Comma-separated exact origins, blank for same-origin-only operation.
+    cors_allowed_origins: str = ""
 
     # Симулятор MAX-бота (строго false в production)
     enable_simulator: bool = True
@@ -147,6 +149,13 @@ class Settings(BaseSettings):
             if self.messenger_transport == "simulator":
                 raise ValueError("MESSENGER_TRANSPORT=simulator is forbidden in production")
         return self
+
+    @property
+    def cors_origins(self) -> list[str]:
+        origins = [origin.strip() for origin in self.cors_allowed_origins.split(",") if origin.strip()]
+        if "*" in origins:
+            raise ValueError("CORS_ALLOWED_ORIGINS must not contain a wildcard")
+        return origins
 
     @property
     def yookassa_trusted_cidrs(self) -> list[str]:
