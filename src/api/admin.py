@@ -33,6 +33,11 @@ from src.core.enums import (
 from src.core.exceptions import NotFoundError, UnauthorizedError, ValidationAppError
 from src.core.security import create_admin_jwt, verify_password
 from src.domain.pricing.calculator import ZERO, PriceCalculationInput, calculate_price, to_decimal
+from src.domain.pricing.payment_plan import (
+    FinalPaymentRoute,
+    PaymentSchedule,
+    estimate_payment_plan,
+)
 from src.infra.db.models import (
     AdminAccount,
     AuditLog,
@@ -123,6 +128,12 @@ class TariffPreviewRequest(BaseModel):
     force_night: bool | None = None
     group_discount_pct: Decimal = ZERO
     override_config: dict[str, Any] | None = None
+
+
+class MarketplacePreviewRequest(BaseModel):
+    total: Decimal
+    schedule: PaymentSchedule
+    final_payment_route: FinalPaymentRoute | None = None
 
 
 class GeoZoneCreateRequest(BaseModel):
@@ -976,6 +987,62 @@ async def preview_tariff_calculation(
         "executor_share_pct": str(bd.executor_share_pct),
         "cleaning_method": bd.cleaning_method.value if bd.cleaning_method else None,
         "pricing_snapshot": bd.pricing_snapshot,
+    }
+
+
+@router.post("/marketplace/preview")
+async def preview_marketplace(
+    body: MarketplacePreviewRequest,
+    _admin: AdminAccount = Depends(require_roles(AdminRole.ADMIN, AdminRole.OWNER)),
+) -> dict[str, Any]:
+    """Закрытый расчёт и макеты; никаких заказов, сообщений и платежей не создаёт."""
+    plan = estimate_payment_plan(
+        body.total, schedule=body.schedule, final_payment_route=body.final_payment_route
+    )
+    estimate = plan.estimate
+    route_labels = {
+        FinalPaymentRoute.PAYMENT_PROVIDER: "через платёжного партнёра",
+        FinalPaymentRoute.DIRECT_TO_EXECUTOR: "напрямую исполнителю",
+    }
+    route = route_labels[plan.final_payment_route] if plan.final_payment_route else "остатка нет"
+    timing_lines = (
+        f"До работ: {plan.upfront:.2f} ₽\n"
+        f"После работ: {plan.after_completion:.2f} ₽ ({route})"
+    )
+    payment_lines = f"Стоимость заказа: {estimate.total:.2f} ₽\n{timing_lines}"
+    client_example = (
+        "ПРОЕКТ · Пример для сайта\n"
+        "ЧистоДвор помогает подобрать исполнителя и сопровождать заказ.\n"
+        f"{payment_lines}\n"
+        "Договор и условия оплаты требуют согласования."
+    )
+    bot_example = (
+        "ПРОЕКТ · Пример сообщения клиенту в MAX\n"
+        f"{payment_lines}\n"
+        "Исполнитель и условия согласуются до заключения договора."
+    )
+    worker_example = (
+        "ПРОЕКТ · Пример для группы исполнителей (один исполнитель)\n"
+        f"Стоимость заказа: {estimate.total:.2f} ₽\n"
+        f"Комиссия сервиса 27%: {estimate.commission:.2f} ₽\n"
+        f"После комиссии: {estimate.executor_after_commission:.2f} ₽ "
+        "до налогов и расходов, включая аренду техники.\n"
+        f"{timing_lines}\n"
+        "Расчёт не является предложением заказа или подтверждением выплаты."
+    )
+    return {
+        "preview_only": True,
+        "total": str(estimate.total),
+        "commission_percent": str(estimate.commission_percent),
+        "commission": str(estimate.commission),
+        "executor_after_commission": str(estimate.executor_after_commission),
+        "schedule": plan.schedule.value,
+        "upfront": str(plan.upfront),
+        "after_completion": str(plan.after_completion),
+        "final_payment_route": plan.final_payment_route.value if plan.final_payment_route else None,
+        "site_example": client_example,
+        "bot_example": bot_example,
+        "group_example": worker_example,
     }
 
 
