@@ -16,6 +16,9 @@ from src.api.admin import router as admin_router
 from src.api.health import router as health_router
 from src.api.legal import router as legal_router
 from src.api.marketplace_drafts import router as marketplace_drafts_router
+from src.api.marketplace_simulator import Simulation
+from src.api.marketplace_simulator import _state as simulation_state
+from src.api.marketplace_simulator import router as marketplace_simulator_router
 from src.api.mock_pay import router as mock_pay_router
 from src.api.public import router as public_router
 from src.api.simulator import router as simulator_router
@@ -66,6 +69,7 @@ def create_app(
         redoc_url="/redoc" if cfg.app_env != "production" else None,
     )
     app.state.container = container
+    app.state.marketplace_simulation = Simulation()
 
     app.add_middleware(
         CORSMiddleware,
@@ -94,6 +98,7 @@ def create_app(
     app.include_router(webhooks_router)
     app.include_router(admin_router)
     app.include_router(marketplace_drafts_router)
+    app.include_router(marketplace_simulator_router)
     app.include_router(media_router)
     # Тестовые платежи не должны быть доступны из live MAX или staging.
     if (
@@ -132,6 +137,11 @@ def create_app(
         if not cfg.enable_simulator:
             return HTMLResponse("<h1>Simulator disabled</h1>", status_code=404)  # type: ignore[return-value]
         return FileResponse(WEB_DIR / "simulator.html")
+
+    @app.get("/simulator/marketplace", response_class=HTMLResponse, include_in_schema=False)
+    async def marketplace_simulation_page(request: Request) -> FileResponse:
+        simulation_state(request)
+        return FileResponse(WEB_DIR / "marketplace-simulator.html")
 
     @app.get("/pay/return", response_class=HTMLResponse, include_in_schema=False)
     async def pay_return_page(order: str = "") -> HTMLResponse:

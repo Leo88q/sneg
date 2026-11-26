@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Новый сценарий · ЧистоДвор</title>
+  <link rel="stylesheet" href="/static/fonts.css"><link rel="stylesheet" href="/static/styles.css">
+  <style>
+    .demo {max-width:1200px;margin:auto;padding:22px 20px 60px;color:#e5f5ff}
+    .demo a {color:#8ee4ff} .demo-hero {padding:30px;margin:18px 0;background:linear-gradient(125deg,#123e59,#102537);border:1px solid #47788d;border-radius:18px}
+    .demo-hero h1 {font-size:clamp(25px,4vw,40px);margin:8px 0} .demo p {line-height:1.5}
+    .demo-grid {display:grid;grid-template-columns:1fr 1.4fr;gap:18px;align-items:start}
+    .demo-box {background:#102638;border:1px solid #31536b;border-radius:16px;padding:20px;margin-bottom:16px}
+    .demo-box h2,.demo-box h3 {margin:0 0 12px} .demo-form {display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    #route-wrap[hidden] {display:none}
+    .demo-form label {display:grid;gap:5px;font-size:13px;color:#b9d5e1} .demo-form .wide {grid-column:1/-1}
+    .demo input,.demo select {width:100%;background:#071b2a;color:#fff;border:1px solid #41687d;border-radius:8px;padding:10px;font:inherit}
+    .demo button {background:#b4edff;color:#092a3e;border:0;border-radius:8px;padding:10px 14px;font:600 14px system-ui;cursor:pointer}
+    .demo button.secondary {background:#284a5d;color:#e8f8ff}.demo button:hover {filter:brightness(1.1)}
+    .demo button:disabled {opacity:.5;cursor:wait}.actions {display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+    .facts {display:grid;grid-template-columns:1fr 1fr;gap:9px}.fact {padding:12px;border:1px solid #30556a;border-radius:9px;background:#0a1c29}
+    .fact span {display:block;color:#a8c5d4;font-size:12px}.fact strong {font-size:17px} .notice {color:#ffdc96}
+    .event {padding:10px 12px;border-left:3px solid #5db5d5;background:#0a1c29;margin:8px 0;border-radius:4px;white-space:pre-wrap;overflow-wrap:anywhere}
+    .event b {color:#85d9f5;font-size:12px}.contract {white-space:pre-wrap;background:#e9f4f5;color:#112a36;border-radius:9px;padding:16px;line-height:1.55;overflow-wrap:anywhere}
+    .demo-error {color:#ffc0bb;min-height:20px} .select-order {display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+    @media(max-width:800px){.demo-grid{grid-template-columns:1fr}.demo-form{grid-template-columns:1fr}.demo-form .wide{grid-column:auto}}
+  </style>
+</head>
+<body><main class="demo">
+  <nav><a href="/">← Сайт</a> &nbsp;·&nbsp; <a href="/simulator">Старый симулятор MAX</a> &nbsp;·&nbsp; <a href="/admin">Админка</a></nav>
+  <header class="demo-hero"><small>ЧИСТОДВОР · ЛОКАЛЬНЫЙ СИМУЛЯТОР</small>
+    <h1>Заказ от заявки до завершения</h1>
+    <p>Посмотрите путь клиента, группы и исполнителя с комиссией 27% от полной цены. Все действия и деньги виртуальные, сообщения показываются в симуляторе MAX, но не отправляются в настоящий MAX.</p>
+    <p class="notice">Это не боевой заказ и не подписанный договор. Заказы хранятся в памяти процесса и исчезнут после перезапуска; сообщения остаются в тестовой базе симулятора.</p>
+  </header>
+  <div class="demo-grid">
+    <section class="demo-box"><h2>1. Заявка клиента</h2><p>Используйте только вымышленные данные.</p>
+      <form id="new-order" class="demo-form">
+        <label class="wide">Услуга<select name="service"><option>Уборка снега</option><option>Расчистка дороги</option><option>Помощь по двору</option></select></label>
+        <label>Полная цена, ₽<input type="number" name="total" value="10000" min="0.01" step="0.01" required></label>
+        <label>Расходы исполнителя, ₽<input type="number" name="expenses" value="2000" min="0" step="0.01" required></label>
+        <label class="wide">График оплаты<select name="schedule"><option value="advance_27">Аванс 27%, остаток после работ</option><option value="full_upfront">Полная предоплата</option><option value="after_completion">После выполнения работ</option></select></label>
+        <label class="wide" id="route-wrap">Куда оплачивается остаток<select name="route"><option value="payment_provider">Через партнёра (имитация)</option><option value="direct_to_executor">Напрямую исполнителю (имитация)</option></select></label>
+        <label>Клиент<input name="client_name" value="Тестовый клиент" maxlength="80" required></label>
+        <label>Исполнитель<input name="executor_name" value="Тестовый исполнитель" maxlength="80" required></label>
+        <label class="wide">Тестовый адрес<input name="address" value="Тестовая улица, 1" maxlength="120" required></label>
+        <label class="wide">Срок выполнения<input name="work_date" value="По согласованию сторон" maxlength="80" required></label>
+        <button class="wide" type="submit">Создать тестовую заявку →</button>
+      </form><p class="demo-error" id="form-error" role="alert"></p>
+    </section>
+    <section><div class="demo-box"><h2>2. Заказ и условия исполнителя</h2><div id="order-list" class="select-order"></div><div id="order-details">Создайте заявку слева, чтобы пройти сценарий.</div><p id="action-error" class="demo-error" role="alert"></p></div>
+      <div class="demo-box"><h2>3. Макет договора</h2><p>В тестовом макете показаны стороны и условия. Нажатия кнопок не являются электронной подписью.</p><div id="contract" class="contract">Появится после выбора исполнителя.</div></div>
+      <div class="demo-box"><h2>4. Ход заказа и MAX</h2><p>Сообщения также отображаются в <a href="/simulator">симуляторе MAX</a>; в настоящий MAX они не отправляются.</p><div id="events">Здесь появится история.</div></div>
+    </section>
+  </div>
+</main><script src="/static/marketplace-simulator.js"></script></body></html>
