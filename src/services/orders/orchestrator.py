@@ -35,7 +35,6 @@ from src.core.enums import (
     PaymentStatus,
     PayoutBatchStatus,
     PriceAdjustmentStatus,
-    RefundStatus,
     ServiceType,
     SubscriptionStatus,
     UserRole,
@@ -92,7 +91,6 @@ from src.services.messenger.base import (
 )
 from src.services.payments.base import (
     CreatePaymentCommand,
-    CreateRefundCommand,
     PaymentProvider,
     ReceiptItem,
 )
@@ -1633,25 +1631,32 @@ class OrderOrchestrator:
                 adj = await session.get(PriceAdjustment, adjustment_id)
                 if adj is None:
                     raise NotFoundError("Запрос корректировки не найден")
-                adj.status = PriceAdjustmentStatus.REJECTED.value
-                adj.client_responded_at = utcnow()
                 order_id = adj.order_id
-                await session.commit()
             return await self.cancel_order(
                 order_id=order_id,
                 by_service=False,
                 reason="Отказ клиента от скорректированной цены на месте",
                 actor_user_id=client_user_id,
+                adjustment_id=adjustment_id,
             )
 
         executors_to_notify: list[User] = []
         async with self.session_factory() as session:
             adj = await session.get(PriceAdjustment, adjustment_id)
-            if adj is None or adj.status != PriceAdjustmentStatus.PENDING.value:
+            if adj is None:
                 raise InvalidStateTransitionError("Корректировка уже обработана или не найдена")
-            order = await session.get(Order, adj.order_id)
+            order_stmt = select(Order).where(Order.id == adj.order_id)
+            if not self.settings.is_sqlite:
+                order_stmt = order_stmt.with_for_update()
+            order = (await session.execute(order_stmt)).scalar_one_or_none()
             if order is None:
                 raise NotFoundError("Заказ не найден")
+            adj_stmt = select(PriceAdjustment).where(PriceAdjustment.id == adjustment_id)
+            if not self.settings.is_sqlite:
+                adj_stmt = adj_stmt.with_for_update().execution_options(populate_existing=True)
+            adj = (await session.execute(adj_stmt)).scalar_one_or_none()
+            if adj is None or adj.status != PriceAdjustmentStatus.PENDING.value:
+                raise InvalidStateTransitionError("Корректировка уже обработана или не найдена")
             if order.client_id != client_user_id:
                 raise PermissionDeniedError("Только клиент заказа может ответить на корректировку")
 
@@ -1964,9 +1969,18 @@ class OrderOrchestrator:
                 raise NotFoundError("Спор не найден")
             if dispute.status not in (DisputeStatus.OPEN.value, DisputeStatus.IN_REVIEW.value):
                 raise InvalidStateTransitionError("Спор уже рассмотрен")
-            order = await session.get(Order, dispute.order_id)
+            order_stmt = select(Order).where(Order.id == dispute.order_id)
+            if not self.settings.is_sqlite:
+                order_stmt = order_stmt.with_for_update()
+            order = (await session.execute(order_stmt)).scalar_one_or_none()
             if order is None:
                 raise NotFoundError("Заказ не найден")
+
+            if discount_amount > ZERO and order.final_total - to_decimal(discount_amount) < order.paid_amount:
+                raise InvalidStateTransitionError(
+                    "Скидка превышает неоплаченную часть заказа. "
+                    "Автоматический возврат недоступен; необходима ручная сверка."
+                )
 
             dispute.status = resolution.value
             dispute.resolution_note = note
@@ -2043,51 +2057,13 @@ class OrderOrchestrator:
         reason: str,
         admin_id: uuid.UUID | None = None,
     ) -> Refund | None:
-        refund_amt = min(to_decimal(amount), order.paid_amount)
-        if refund_amt <= ZERO:
-            return None
-        payment = (
-            await session.execute(
-                select(Payment)
-                .where(
-                    Payment.order_id == order.id,
-                    Payment.status == PaymentStatus.SUCCEEDED.value,
-                )
-                .order_by(Payment.paid_at.desc())
-                .limit(1)
-            )
-        ).scalar_one_or_none()
-        if payment is None or not payment.provider_payment_id:
-            return None
-
-        idem = uuid.uuid4()
-        res = await self.payment_provider.create_refund(
-            CreateRefundCommand(
-                provider_payment_id=payment.provider_payment_id,
-                idempotency_key=idem,
-                amount=refund_amt,
-                reason=reason,
-            )
+        # Do not perform external financial operations inside an uncommitted
+        # transaction: a rollback or timeout would make a retry double-refund.
+        # This guard also prevents callers from reporting an unconfirmed refund.
+        raise InvalidStateTransitionError(
+            "Автоматический возврат временно недоступен. "
+            "Обратитесь к администратору для ручной обработки и сверки с платёжным провайдером."
         )
-        ref = Refund(
-            payment_id=payment.id,
-            order_id=order.id,
-            provider_refund_id=res.provider_refund_id,
-            idempotency_key=idem,
-            amount=refund_amt,
-            reason=reason,
-            status=res.status,
-            initiated_by=admin_id,
-            raw_response=res.raw_response,
-            succeeded_at=utcnow() if res.status == RefundStatus.SUCCEEDED.value else None,
-        )
-        session.add(ref)
-        order.payment_status = (
-            OrderPaymentStatus.REFUNDED.value
-            if refund_amt >= order.paid_amount
-            else OrderPaymentStatus.PARTIALLY_REFUNDED.value
-        )
-        return ref
 
     async def cancel_order(
         self,
@@ -2097,6 +2073,7 @@ class OrderOrchestrator:
         reason: str,
         actor_user_id: uuid.UUID | None = None,
         actor_admin_id: uuid.UUID | None = None,
+        adjustment_id: uuid.UUID | None = None,
     ) -> Order:
         notified_executors: list[User] = []
         client: User | None = None
@@ -2104,9 +2081,55 @@ class OrderOrchestrator:
         withheld_amt = ZERO
 
         async with self.session_factory() as session:
-            order = await session.get(Order, order_id)
+            stmt = select(Order).where(Order.id == order_id)
+            if not self.settings.is_sqlite:
+                stmt = stmt.with_for_update()
+            order = (await session.execute(stmt)).scalar_one_or_none()
             if order is None:
                 raise NotFoundError("Заказ не найден")
+            if actor_admin_id is not None:
+                admin = await session.get(AdminAccount, actor_admin_id)
+                if not admin or not admin.is_active or admin.role not in (
+                    AdminRole.ADMIN.value, AdminRole.OWNER.value
+                ):
+                    raise PermissionDeniedError("Отмена доступна только администратору")
+            elif actor_user_id is not None:
+                actor = await session.get(User, actor_user_id)
+                if not actor or actor.is_blocked or (
+                    by_service and actor.role not in (
+                        UserRole.FOREMAN.value, UserRole.ADMIN.value, UserRole.OWNER.value
+                    )
+                ) or (not by_service and order.client_id != actor.id):
+                    raise PermissionDeniedError("Нет прав на отмену заказа")
+            else:
+                raise PermissionDeniedError("Нет прав на отмену заказа")
+            if adjustment_id is not None:
+                adj_stmt = select(PriceAdjustment).where(
+                    PriceAdjustment.id == adjustment_id, PriceAdjustment.order_id == order.id
+                )
+                if not self.settings.is_sqlite:
+                    adj_stmt = adj_stmt.with_for_update()
+                adj = (await session.execute(adj_stmt)).scalar_one_or_none()
+                if adj is None or adj.status != PriceAdjustmentStatus.PENDING.value:
+                    raise InvalidStateTransitionError("Корректировка уже обработана или не найдена")
+                adj.status = PriceAdjustmentStatus.REJECTED.value
+                adj.client_responded_at = utcnow()
+            if order.paid_amount > ZERO:
+                raise InvalidStateTransitionError(
+                    "Отмена оплаченного заказа временно недоступна автоматически. "
+                    "Обратитесь к администратору для ручной обработки и сверки оплаты и возврата."
+                )
+            # A locally pending or canceled payment can still have succeeded at
+            # the provider. Until cancellation and reconciliation are coordinated,
+            # even an apparently unpaid order with any payment is unsafe to cancel.
+            has_payment = (await session.execute(
+                select(Payment.id).where(Payment.order_id == order.id).limit(1)
+            )).scalar_one_or_none()
+            if has_payment is not None:
+                raise InvalidStateTransitionError(
+                    "Отмена заказа с платёжной ссылкой временно недоступна автоматически. "
+                    "Обратитесь к администратору для сверки с платёжным провайдером."
+                )
             target = (
                 OrderStatus.CANCELED_BY_SERVICE if by_service else OrderStatus.CANCELED_BY_CLIENT
             )
@@ -2423,47 +2446,11 @@ class OrderOrchestrator:
         counts = {"expired_unpaid": 0, "escalated_dispatch": 0, "auto_accepted": 0}
 
         async with self.session_factory() as session:
-            # 1. Таймаут неоплаченных авансов
-            unpaid_orders = (
-                await session.execute(
-                    select(Order).where(Order.status == OrderStatus.AWAITING_ADVANCE.value)
-                )
-            ).scalars().all()
-            expired_msgs: list[tuple[int, int]] = []
+            # Do not infer provider cancellation from a local deadline: the
+            # customer may have paid and the webhook can still be in flight.
+            # Expiry requires coordinated provider reconciliation first.
             escalated_ids: list[tuple[uuid.UUID, int, str, Decimal]] = []
             foreman_max_ids: list[int] = []
-
-            for order in unpaid_orders:
-                pay = (
-                    await session.execute(
-                        select(Payment)
-                        .where(
-                            Payment.order_id == order.id,
-                            Payment.purpose == PaymentPurpose.ADVANCE.value,
-                            Payment.status == PaymentStatus.PENDING.value,
-                        )
-                        .limit(1)
-                    )
-                ).scalar_one_or_none()
-                is_expired = force_all or (
-                    pay is not None and pay.expires_at is not None and pay.expires_at <= now
-                )
-                if is_expired:
-                    old_st = order.status
-                    order.status = OrderStatus.CANCELED_TIMEOUT.value
-                    if pay:
-                        pay.status = PaymentStatus.CANCELED.value
-                    await self._log_status(
-                        session,
-                        order=order,
-                        from_status=old_st,
-                        to_status=order.status,
-                        reason="Истёк срок оплаты аванса",
-                    )
-                    counts["expired_unpaid"] += 1
-                    client = await session.get(User, order.client_id)
-                    if client:
-                        expired_msgs.append((client.max_user_id, order.public_number))
 
             # 2. Эскалация неразобранных заказов (волна + бонус + уведомление бригадиру)
             tariff = await self.get_active_tariff(session)
@@ -2508,11 +2495,6 @@ class OrderOrchestrator:
 
             await session.commit()
 
-        for uid, pub_num in expired_msgs:
-            await self._notify_max_user(uid, OutgoingMessage(
-                    text=f"⏱ Заказ **#{pub_num}** отменён: истёк срок оплаты аванса."
-                ),
-            )
         for oid, pub_num, area_hint, bonus in escalated_ids:
             await self._publish_or_update_dispatch_card(oid, show_take_button=True)
             for fm_uid in foreman_max_ids:

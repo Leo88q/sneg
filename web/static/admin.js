@@ -446,7 +446,7 @@ async function proposeAdj(orderId, currentTotal) {
 async function cancelOrd(orderId) {
   const vals = await IceDialog.form({
     title: 'Отмена заказа диспетчером',
-    subtitle: 'При отмене со стороны сервиса клиенту возвращается 100% оплаченного аванса.',
+    subtitle: 'Автоматическая отмена заказа с платёжной ссылкой или оплатой временно недоступна. Обработайте обращение вручную и сверьте оплату и возврат с провайдером.',
     submitText: 'Отменить заказ',
     submitClass: 'btn-danger',
     fields: [
@@ -459,7 +459,7 @@ async function cancelOrd(orderId) {
       method: 'POST',
       body: JSON.stringify({ reason: vals.reason, by_service: true }),
     });
-    toast('Заказ отменён, возврат инициирован');
+    toast('Заказ отменён');
     closeModal();
     loadTab('orders');
   } catch (e) {
