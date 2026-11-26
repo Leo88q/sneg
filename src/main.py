@@ -95,7 +95,13 @@ def create_app(
     app.include_router(admin_router)
     app.include_router(marketplace_drafts_router)
     app.include_router(media_router)
-    if cfg.payment_provider == "mock":
+    # Тестовые платежи не должны быть доступны из live MAX или staging.
+    if (
+        cfg.app_env == "development"
+        and cfg.payment_provider == "mock"
+        and cfg.enable_simulator
+        and cfg.messenger_transport == "simulator"
+    ):
         app.include_router(mock_pay_router)
     if cfg.enable_simulator:
         app.include_router(simulator_router)

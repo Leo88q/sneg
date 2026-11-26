@@ -1234,7 +1234,7 @@ async function renderAudit(root) {
         </tr>`;
             }
           )
-          .join('') || '<tr><td colspan="4" style="color:var(--text-muted)">Чаты ещё не привязаны. Напишите <code>/bind_alerts_chat ПАРОЛЬ</code> боту в ЛС и <code>/bind_dispatch_chat</code> в группе рабочих.</td></tr>'}</tbody>
+          .join('') || '<tr><td colspan="4" style="color:var(--text-muted)">Чаты ещё не привязаны. Подтвердите роль у бота в ЛС, затем напишите <code>/bind_dispatch_chat</code> в группе рабочих. Никогда не отправляйте пароль в группу.</td></tr>'}</tbody>
       </table>
     </div>
 
