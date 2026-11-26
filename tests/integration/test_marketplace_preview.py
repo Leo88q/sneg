@@ -11,7 +11,11 @@ from src.infra.db.models import Order, Payment, SimulatorMessage
 @pytest.mark.asyncio
 async def test_preview_requires_owner_or_admin(client: Any) -> None:
     http, _ = client
-    payload = {"total": "10000", "schedule": "advance_27", "final_payment_route": "payment_provider"}
+    payload = {
+        "total": "10000",
+        "schedule": "advance_27",
+        "final_payment_route": "payment_provider",
+    }
     assert (await http.post("/api/v1/admin/marketplace/preview", json=payload)).status_code == 401
     login = await http.post(
         "/api/v1/admin/auth/login",
@@ -64,6 +68,26 @@ async def test_preview_for_each_payment_route_and_schedule_has_no_side_effects(c
 
 
 @pytest.mark.asyncio
+async def test_rental_is_optional_and_can_exceed_executor_amount(client: Any) -> None:
+    http, _ = client
+    await http.post(
+        "/api/v1/admin/auth/login", json={"email": "owner@sneg.local", "password": "admin12345"}
+    )
+    response = await http.post(
+        "/api/v1/admin/marketplace/preview",
+        json={"total": "10000", "schedule": "full_upfront", "rental_estimate": "8000.00"},
+    )
+    assert response.status_code == 200
+    assert response.json()["commission"] == "2700.00"
+    assert response.json()["after_commission_and_rental"] == "-700.00"
+    invalid = await http.post(
+        "/api/v1/admin/marketplace/preview",
+        json={"total": "10000", "schedule": "full_upfront", "rental_estimate": "1.001"},
+    )
+    assert invalid.status_code == 422
+
+
+@pytest.mark.asyncio
 async def test_preview_rejects_invalid_money_and_route(client: Any) -> None:
     http, _ = client
     await http.post(
@@ -76,4 +100,6 @@ async def test_preview_rejects_invalid_money_and_route(client: Any) -> None:
         {"total": "100", "schedule": "full_upfront", "final_payment_route": "payment_provider"},
         {"total": "100", "schedule": "unknown"},
     ]:
-        assert (await http.post("/api/v1/admin/marketplace/preview", json=payload)).status_code == 422
+        assert (
+            await http.post("/api/v1/admin/marketplace/preview", json=payload)
+        ).status_code == 422

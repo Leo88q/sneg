@@ -476,7 +476,7 @@ async function renderMarketplacePreview(root) {
     <div class="page-head"><div>
       <div class="section-kicker">ВНУТРЕННИЙ ПРОЕКТ · НЕ ДЕЙСТВУЮЩИЕ УСЛОВИЯ</div>
       <h2>Новая модель: расчёт и макеты</h2>
-    </div><span class="pill pill-warn">ТОЛЬКО ПРОСМОТР</span></div>
+    </div><span class="pill pill-warn">ВНУТРЕННИЙ ПРОЕКТ</span></div>
     <div class="ice-panel" style="display:grid;gap:14px;margin-bottom:16px">
       <p>Это предварительная модель для одного исполнителя. Новые условия ещё не включены:
       заказы, платежи и сообщения в MAX не создаются. Расчёты и документы требуют согласования.</p>
@@ -496,9 +496,28 @@ async function renderMarketplacePreview(root) {
             <option value="payment_provider">Через платёжного партнёра</option>
             <option value="direct_to_executor">Напрямую исполнителю</option>
           </select></div>
+        <div><label class="field-label" for="mp-rental">Ориентировочная аренда техники для исполнителя, ₽ (необязательно)</label>
+          <input class="input" id="mp-rental" type="number" min="0" max="9999999999.99" step="0.01" placeholder="Не указана" />
+          <small>Аренда входит в полную цену. Комиссия считается от всей суммы. Это только проверка экономики, не утверждённый бюджет.</small></div>
         <button class="btn btn-primary" type="submit">Рассчитать и показать макеты</button>
       </form>
       <div id="mp-result" aria-live="polite" style="font-size:14px"></div>
+    </div>
+    <div class="ice-panel" style="display:grid;gap:12px">
+      <h3>Внутренние черновики условий</h3>
+      <p>Черновик не является заказом, договором или согласием сторон. Не вносите персональные данные: здесь сохраняются только вид услуги и параметры расчёта. Версии не изменяют действующие заказы.</p>
+      <form id="draft-form" style="display:grid;gap:10px">
+        <div id="draft-edit-label">Новый черновик</div>
+        <div class="split-2"><div><label class="field-label" for="draft-service">Услуга</label><select id="draft-service">
+          <option value="snow_yard">Уборка снега во дворе</option><option value="snow_road">Расчистка дороги</option>
+          <option value="car_rescue">Машина в снегу</option><option value="yard_help">Помощь по двору</option>
+          <option value="movers">Грузчики</option><option value="roof_cleaning">Расчистка крыши</option><option value="reagents">Посыпка реагентами</option>
+        </select></div><div><label class="field-label" for="draft-total">Стоимость, ₽</label><input class="input" id="draft-total" type="number" min="0.01" max="9999999999.99" step="0.01" value="10000" required /></div></div>
+        <div class="split-2"><div><label class="field-label" for="draft-schedule">График оплаты</label><select id="draft-schedule"><option value="advance_27">Аванс 27%</option><option value="full_upfront">Полная предоплата</option><option value="after_completion">После работ</option></select></div>
+        <div><label class="field-label" for="draft-route">Оплата после работ</label><select id="draft-route"><option value="payment_provider">Платёжный партнёр</option><option value="direct_to_executor">Напрямую исполнителю</option></select></div></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap"><button type="submit" class="btn btn-primary" id="draft-save">Сохранить черновик</button><button type="button" class="btn" id="draft-reset">Новый черновик</button></div>
+      </form>
+      <div id="draft-list" aria-live="polite">Загрузка…</div><div id="draft-detail"></div>
     </div>
   `;
   const form = document.getElementById('marketplace-form');
@@ -518,6 +537,7 @@ async function renderMarketplacePreview(root) {
       total: document.getElementById('mp-total').value,
       schedule: schedule.value,
       final_payment_route: schedule.value === 'full_upfront' ? null : route.value,
+      rental_estimate: document.getElementById('mp-rental').value || null,
     };
     result.textContent = 'Расчёт…';
     try {
@@ -532,6 +552,7 @@ async function renderMarketplacePreview(root) {
           Стоимость: ${rub(data.total)} · Комиссия 27%: ${rub(data.commission)}<br>
           Исполнителю после комиссии: ${rub(data.executor_after_commission)} до налогов и расходов.<br>
           Аванс: ${rub(data.upfront)} · После работ: ${rub(data.after_completion)}
+          ${data.rental_estimate !== null ? `<br>Аренда: ${rub(data.rental_estimate)} · После комиссии и аренды: ${rub(data.after_commission_and_rental)} до налогов и прочих расходов.${Number(data.after_commission_and_rental) <= 0 ? ' Внимание: на вознаграждение и прочие расходы ничего не остаётся.' : ''}` : '<br>Аренда не указана: рентабельность не оценена.'}
         </div>
         ${[
           ['Пример для сайта', data.site_example],
@@ -544,6 +565,92 @@ async function renderMarketplacePreview(root) {
       if (result.isConnected && currentRevision === revision) result.textContent = 'Ошибка расчёта: ' + e.message;
     }
   });
+  initMarketplaceDrafts();
+}
+
+function initMarketplaceDrafts() {
+  const form = document.getElementById('draft-form');
+  const list = document.getElementById('draft-list');
+  const detail = document.getElementById('draft-detail');
+  const schedule = document.getElementById('draft-schedule');
+  const route = document.getElementById('draft-route');
+  const save = document.getElementById('draft-save');
+  let selected = null;
+  let detailRevision = 0;
+  const reset = () => {
+    selected = null;
+    document.getElementById('draft-edit-label').textContent = 'Новый черновик';
+    save.textContent = 'Сохранить черновик';
+  };
+  const loadList = async () => {
+    try {
+      const drafts = await api('/api/v1/admin/marketplace/drafts');
+      if (!list.isConnected) return;
+      list.innerHTML = drafts.length ? `<b>Последние черновики</b><div style="display:grid;gap:6px;margin-top:8px">${drafts.map((d) =>
+        `<button type="button" class="btn btn-sm" data-draft-id="${esc(d.id)}">${esc(d.id.slice(0, 8))} · версия ${esc(d.revision)} · ${d.status === 'archived' ? 'архив' : 'черновик'}</button>`
+      ).join('')}</div>` : 'Черновиков пока нет.';
+    } catch (e) { if (list.isConnected) list.textContent = 'Не удалось загрузить черновики: ' + e.message; }
+  };
+  const openDraft = async (id) => {
+    const token = ++detailRevision;
+    detail.textContent = 'Загрузка версий…';
+    try {
+      const draft = await api(`/api/v1/admin/marketplace/drafts/${encodeURIComponent(id)}`);
+      if (!detail.isConnected || token !== detailRevision) return;
+      const last = draft.versions[draft.versions.length - 1];
+      detail.innerHTML = `<div class="receipt-box" style="margin-top:10px"><b>Черновик ${esc(draft.id.slice(0, 8))} · ${draft.status === 'archived' ? 'архив' : 'активен'}</b>
+        <div style="margin:8px 0">${draft.versions.map((v) => `Версия ${esc(v.revision)}: ${esc(v.service_type)} · ${esc(v.total)} ₽ · комиссия ${esc(v.commission)} ₽ · ${esc(v.schedule)} · ${esc(v.final_payment_route || 'без остатка')} · до работ ${esc(v.upfront)} ₽ · после ${esc(v.after_completion)} ₽<br>`).join('')}</div>
+        ${draft.status === 'draft' ? '<button type="button" class="btn btn-sm" id="draft-edit">Изменить: создать новую версию</button> <button type="button" class="btn btn-sm" id="draft-archive">В архив</button>' : ''}</div>`;
+      const edit = document.getElementById('draft-edit');
+      if (edit) edit.addEventListener('click', () => {
+        selected = { id: draft.id, revision: draft.revision };
+        document.getElementById('draft-edit-label').textContent = `Новая версия черновика ${draft.id.slice(0, 8)} (текущая: ${draft.revision})`;
+        document.getElementById('draft-service').value = last.service_type;
+        document.getElementById('draft-total').value = last.total;
+        schedule.value = last.schedule;
+        if (last.final_payment_route) route.value = last.final_payment_route;
+        route.disabled = schedule.value === 'full_upfront';
+        save.textContent = 'Создать новую версию';
+      });
+      const archive = document.getElementById('draft-archive');
+      if (archive) archive.addEventListener('click', async () => {
+        if (!window.confirm('Архивировать черновик? Его историю можно будет просмотреть, но изменить больше нельзя.')) return;
+        archive.disabled = true;
+        try {
+          await api(`/api/v1/admin/marketplace/drafts/${encodeURIComponent(id)}/archive`, { method: 'POST', body: JSON.stringify({ expected_revision: draft.revision }) });
+          if (selected && selected.id === id) reset();
+          await loadList(); await openDraft(id);
+        } catch (e) { toast('Ошибка: ' + e.message); archive.disabled = false; }
+      });
+    } catch (e) { if (detail.isConnected && token === detailRevision) detail.textContent = 'Ошибка: ' + e.message; }
+  };
+  list.addEventListener('click', (event) => {
+    const btn = event.target.closest('[data-draft-id]');
+    if (btn) openDraft(btn.dataset.draftId);
+  });
+  document.getElementById('draft-reset').addEventListener('click', reset);
+  schedule.addEventListener('change', () => { route.disabled = schedule.value === 'full_upfront'; });
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    save.disabled = true;
+    const terms = {
+      service_type: document.getElementById('draft-service').value,
+      total: document.getElementById('draft-total').value,
+      schedule: schedule.value,
+      final_payment_route: schedule.value === 'full_upfront' ? null : route.value,
+    };
+    const editing = selected;
+    const url = editing ? `/api/v1/admin/marketplace/drafts/${encodeURIComponent(editing.id)}/versions` : '/api/v1/admin/marketplace/drafts';
+    if (editing) terms.expected_revision = editing.revision;
+    try {
+      const saved = await api(url, { method: 'POST', body: JSON.stringify(terms) });
+      const id = editing ? editing.id : saved.id;
+      reset(); await loadList(); await openDraft(id);
+      toast('Внутренний черновик сохранён');
+    } catch (e) { toast('Ошибка: ' + e.message); }
+    finally { save.disabled = false; }
+  });
+  loadList();
 }
 
 async function renderTariffs(root) {
